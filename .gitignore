@@ -1,0 +1,10 @@
+.DS_Store
+node_modules
+.next
+out
+dist
+coverage
+*.pyc
+__pycache__
+data
+tsconfig.tsbuildinfo
