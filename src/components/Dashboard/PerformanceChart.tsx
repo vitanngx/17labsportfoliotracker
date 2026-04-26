@@ -58,8 +58,11 @@ export default function PerformanceChart({
                 contentStyle={{
                   background: "rgba(7, 11, 17, 0.96)",
                   border: "1px solid rgba(151, 171, 190, 0.18)",
-                  borderRadius: "16px"
+                  borderRadius: "16px",
+                  color: "#edf2f7"
                 }}
+                itemStyle={{ color: "#edf2f7" }}
+                labelStyle={{ color: "#edf2f7" }}
                 formatter={(value: number) => formatCurrency(Number(value), currency)}
                 labelFormatter={(label) => formatDateLabel(String(label))}
               />
