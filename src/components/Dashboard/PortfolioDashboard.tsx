@@ -27,17 +27,52 @@ export default function PortfolioDashboard({
   const [editingTransaction, setEditingTransaction] = React.useState<Transaction | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [adminError, setAdminError] = React.useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = React.useState(() => new Date());
+  const pollingInFlightRef = React.useRef(false);
 
   const isAdminMode = mode === "admin";
 
-  async function refreshPortfolio() {
+  async function refreshPortfolio(options?: { silent?: boolean }) {
+    if (pollingInFlightRef.current) {
+      return;
+    }
+
+    pollingInFlightRef.current = true;
     const response = await fetch("/api/portfolio", {
       cache: "no-store"
     });
-    const nextPayload = (await response.json()) as PortfolioPayload;
-    setPayload(nextPayload);
-    router.refresh();
+    try {
+      if (!response.ok) {
+        if (!options?.silent) {
+          setAdminError("Unable to refresh portfolio data.");
+        }
+        return;
+      }
+
+      const nextPayload = (await response.json()) as PortfolioPayload;
+      setPayload(nextPayload);
+      setLastUpdatedAt(new Date());
+      if (!options?.silent) {
+        router.refresh();
+      }
+    } finally {
+      pollingInFlightRef.current = false;
+    }
   }
+
+  React.useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (document.hidden || pollingInFlightRef.current) {
+        return;
+      }
+
+      void refreshPortfolio({ silent: true });
+    }, 60000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   async function handleTransactionSubmit(input: TransactionInput, transactionId?: string) {
     setBusy(true);
@@ -169,6 +204,10 @@ export default function PortfolioDashboard({
             <div className="flex flex-wrap gap-3">
               <div className="rounded-full border border-line px-4 py-3 text-sm text-mist">
                 Base currency: <span className="text-ink">{settings.baseCurrency}</span>
+              </div>
+              <div className="rounded-full border border-line px-4 py-3 text-sm text-mist">
+                Auto refresh: <span className="text-ink">60s</span> • Last update{" "}
+                <span className="text-ink">{formatTimeLabel(lastUpdatedAt)}</span>
               </div>
               {isAdminMode ? (
                 <button className="secondary-button" type="button" onClick={handleLogout}>
@@ -350,4 +389,12 @@ function parseCsvTransactions(rawCsv: string): CsvImportRow[] {
   });
 
   return rows;
+}
+
+function formatTimeLabel(value: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(value);
 }
