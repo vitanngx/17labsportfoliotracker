@@ -46,10 +46,45 @@ export function formatCompactCurrency(
   value: number,
   currency = "USD"
 ): string {
-  return new Intl.NumberFormat("en-US", {
+  const absoluteValue = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+
+  if (absoluteValue < 1000) {
+    return `${sign}${formatCurrency(absoluteValue, currency)}`;
+  }
+
+  const units = [
+    { threshold: 1_000_000_000_000, suffix: "T" },
+    { threshold: 1_000_000_000, suffix: "B" },
+    { threshold: 1_000_000, suffix: "M" },
+    { threshold: 1_000, suffix: "K" }
+  ];
+
+  const unit = units.find((entry) => absoluteValue >= entry.threshold);
+
+  if (!unit) {
+    return `${sign}${formatCurrency(absoluteValue, currency)}`;
+  }
+
+  const compactValue = absoluteValue / unit.threshold;
+  const precision = compactValue >= 100 ? 0 : compactValue >= 10 ? 1 : 2;
+  const numeric = trimTrailingZeros(compactValue.toFixed(precision));
+  const symbol = getCurrencySymbol(currency);
+
+  return `${sign}${symbol}${numeric}${unit.suffix}`;
+}
+
+function trimTrailingZeros(value: string) {
+  return value.replace(/\.0+$|(\.\d*[1-9])0+$/, "$1");
+}
+
+function getCurrencySymbol(currency: string) {
+  const parts = new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
-    notation: "compact",
-    maximumFractionDigits: 2
-  }).format(value);
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0
+  }).formatToParts(0);
+
+  return parts.find((part) => part.type === "currency")?.value ?? `${currency} `;
 }

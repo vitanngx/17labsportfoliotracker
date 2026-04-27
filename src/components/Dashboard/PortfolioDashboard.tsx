@@ -27,10 +27,14 @@ export default function PortfolioDashboard({
   const [editingTransaction, setEditingTransaction] = React.useState<Transaction | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [adminError, setAdminError] = React.useState<string | null>(null);
-  const [lastUpdatedAt, setLastUpdatedAt] = React.useState(() => new Date());
+  const [lastUpdatedAt, setLastUpdatedAt] = React.useState<Date | null>(null);
   const pollingInFlightRef = React.useRef(false);
 
   const isAdminMode = mode === "admin";
+
+  React.useEffect(() => {
+    setLastUpdatedAt(new Date());
+  }, []);
 
   async function refreshPortfolio(options?: { silent?: boolean }) {
     if (pollingInFlightRef.current) {
@@ -207,7 +211,9 @@ export default function PortfolioDashboard({
               </div>
               <div className="rounded-full border border-line px-4 py-3 text-sm text-mist">
                 Auto refresh: <span className="text-ink">60s</span> • Last update{" "}
-                <span className="text-ink">{formatTimeLabel(lastUpdatedAt)}</span>
+                <span className="text-ink">
+                  {lastUpdatedAt ? formatTimeLabel(lastUpdatedAt) : "--:--:--"}
+                </span>
               </div>
               {isAdminMode ? (
                 <button className="secondary-button" type="button" onClick={handleLogout}>
