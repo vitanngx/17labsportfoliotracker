@@ -189,7 +189,7 @@ export default function PortfolioDashboard({
 
   return (
     <main className="relative overflow-hidden px-4 pb-16 pt-6 md:px-8 xl:px-10">
-      <div className="mx-auto max-w-[1600px] space-y-6">
+      <div className="mx-auto max-w-[1760px] space-y-6">
         <header className="surface-panel rounded-[32px] px-6 py-7 md:px-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-3xl">
@@ -282,27 +282,45 @@ export default function PortfolioDashboard({
           />
         </section>
 
-        <section className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-          <PerformanceChart data={portfolio.history} currency={settings.baseCurrency} />
-          <div className="grid gap-6">
+        <section className="grid gap-6 xl:grid-cols-12 xl:items-stretch">
+          <div className="xl:col-span-7">
+            <PerformanceChart
+              data={portfolio.history}
+              currency={settings.baseCurrency}
+              className="h-full"
+            />
+          </div>
+          <div className="xl:col-span-5">
             <AllocationDonut
               title="Allocation by Asset"
               subtitle="Holdings and cash translated into the base currency."
               data={portfolio.summary.allocationByAsset}
               currency={settings.baseCurrency}
+              className="h-full"
+              chartHeightClass="h-[320px]"
+              legendLimit={7}
             />
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-12 xl:items-stretch">
+          <div className="xl:col-span-6">
             <AllocationDonut
               title="Allocation by Asset Class"
               subtitle="Portfolio concentration by sleeve including cash."
               data={portfolio.summary.allocationByClass}
               currency={settings.baseCurrency}
+              className="h-full"
+              chartHeightClass="h-[260px]"
             />
+          </div>
+          <div className="xl:col-span-6">
+            <CashBalancesTable cashBalances={portfolio.cashBalances} className="h-full" />
           </div>
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)]">
+        <section>
           <HoldingsTable holdings={portfolio.holdings} />
-          <CashBalancesTable cashBalances={portfolio.cashBalances} />
         </section>
 
         {isAdminMode ? (

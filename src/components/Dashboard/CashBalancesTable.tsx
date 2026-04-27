@@ -4,15 +4,20 @@ import SectionCard from "@/components/Dashboard/SectionCard";
 
 interface CashBalancesTableProps {
   cashBalances: CashBalance[];
+  className?: string;
 }
 
-export default function CashBalancesTable({ cashBalances }: CashBalancesTableProps) {
+export default function CashBalancesTable({
+  cashBalances,
+  className = ""
+}: CashBalancesTableProps) {
   return (
     <SectionCard
       title="Cash Balances"
       subtitle="Cash is tracked from deposits, withdrawals, dividends, and trade settlement flows."
+      className={className}
     >
-      <div className="overflow-x-auto">
+      <div className="flex-1 overflow-x-auto">
         <table className="data-table min-w-full">
           <thead>
             <tr>

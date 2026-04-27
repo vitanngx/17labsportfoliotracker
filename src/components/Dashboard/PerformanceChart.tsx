@@ -18,17 +18,19 @@ import SectionCard from "@/components/Dashboard/SectionCard";
 interface PerformanceChartProps {
   data: PortfolioHistoryPoint[];
   currency: string;
+  className?: string;
 }
 
 export default function PerformanceChart({
   data,
-  currency
+  currency,
+  className = ""
 }: PerformanceChartProps) {
   return (
     <SectionCard
       title="Portfolio Value"
       subtitle="Base-currency portfolio value with holdings and cash normalized through the FX layer."
-      className="chart-shell"
+      className={`chart-shell ${className}`}
     >
       <div className="h-[320px]">
         {data.length === 0 ? (

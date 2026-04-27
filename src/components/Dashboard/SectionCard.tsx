@@ -16,7 +16,7 @@ export default function SectionCard({
   className = ""
 }: SectionCardProps) {
   return (
-    <section className={`surface-panel rounded-[28px] p-6 ${className}`}>
+    <section className={`surface-panel flex h-full flex-col rounded-[28px] p-6 ${className}`}>
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="section-title text-mist">{title}</p>
