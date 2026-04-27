@@ -282,7 +282,7 @@ export default function PortfolioDashboard({
           />
         </section>
 
-        <section className="grid gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <section className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
           <PerformanceChart data={portfolio.history} currency={settings.baseCurrency} />
           <div className="grid gap-6">
             <AllocationDonut
