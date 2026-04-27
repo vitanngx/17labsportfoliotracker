@@ -21,6 +21,10 @@ def normalize_symbol(asset: str, asset_class: str) -> tuple[str, str]:
         base = raw.replace(".VN", "")
         return base, f"{base}.VN"
 
+    if asset_class == "FR_STOCK":
+        base = raw.replace(".PA", "")
+        return base, f"{base}.PA"
+
     return raw, raw
 
 

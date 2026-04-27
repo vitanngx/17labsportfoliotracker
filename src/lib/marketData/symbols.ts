@@ -22,6 +22,10 @@ export function normalizeAssetInput(
     return `${raw}-USD`;
   }
 
+  if (assetClass === "FR_STOCK") {
+    return raw.endsWith(".PA") ? raw : `${raw}.PA`;
+  }
+
   return raw;
 }
 

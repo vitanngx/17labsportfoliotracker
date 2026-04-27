@@ -1,5 +1,6 @@
 export type AssetClass =
   | "US_STOCK"
+  | "FR_STOCK"
   | "ETF"
   | "CRYPTO"
   | "VN_STOCK"

@@ -11,6 +11,7 @@ export const ASSET_CLASS_OPTIONS: Array<{
   defaultCurrency: string;
 }> = [
   { value: "US_STOCK", label: "US Stock", defaultCurrency: "USD" },
+  { value: "FR_STOCK", label: "French Stock", defaultCurrency: "EUR" },
   { value: "ETF", label: "ETF", defaultCurrency: "USD" },
   { value: "CRYPTO", label: "Crypto", defaultCurrency: "USD" },
   { value: "VN_STOCK", label: "Vietnam Stock", defaultCurrency: "VND" },

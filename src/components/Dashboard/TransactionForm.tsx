@@ -65,6 +65,22 @@ export default function TransactionForm({
     }));
   }
 
+  function handleAssetClassChange(nextAssetClass: AssetClass) {
+    const nextDefaultCurrency = getDefaultCurrency(nextAssetClass);
+
+    setDraft((current) => {
+      const previousDefaultCurrency = getDefaultCurrency(current.assetClass);
+      const shouldReplaceCurrency =
+        current.currency.trim() === "" || current.currency === previousDefaultCurrency;
+
+      return {
+        ...current,
+        assetClass: nextAssetClass,
+        currency: shouldReplaceCurrency ? nextDefaultCurrency : current.currency
+      };
+    });
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
@@ -131,7 +147,7 @@ export default function TransactionForm({
           <input className="field-input mono" type="text" value={draft.asset} onChange={(event) => updateField("asset", event.target.value)} />
         </Field>
         <Field label="Asset Class">
-          <select className="field-input" value={draft.assetClass} onChange={(event) => updateField("assetClass", event.target.value as AssetClass)}>
+          <select className="field-input" value={draft.assetClass} onChange={(event) => handleAssetClassChange(event.target.value as AssetClass)}>
             {ASSET_CLASS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -200,6 +216,13 @@ function createDraft(): DraftState {
     currency: "USD",
     note: ""
   };
+}
+
+function getDefaultCurrency(assetClass: AssetClass) {
+  return (
+    ASSET_CLASS_OPTIONS.find((option) => option.value === assetClass)
+      ?.defaultCurrency ?? "USD"
+  );
 }
 
 function Field({
