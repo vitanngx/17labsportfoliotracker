@@ -91,13 +91,14 @@ export function buildPortfolioState(
       totalPortfolioValueBase,
       totalHoldingsValueBase,
       totalCashValueBase,
+      grossExposureBase: totalHoldingsValueBase,
       totalInvestedCapitalBase,
       totalUnrealizedPnlBase,
       totalRealizedPnlBase: ledger.realizedPnlBase,
       totalDividendIncomeBase: ledger.dividendIncomeBase,
       totalReturnPct,
-      allocationByAsset: buildAllocationByAsset(holdings, cashBalances),
-      allocationByClass: buildAllocationByClass(holdings, cashBalances),
+      allocationByAsset: buildAllocationByAsset(holdings),
+      allocationByClass: buildAllocationByClass(holdings),
       sharpeRatio: riskMetrics.sharpeRatio,
       volatility: riskMetrics.volatility,
       maxDrawdownPct: computeMaxDrawdown(history)
@@ -269,7 +270,7 @@ function buildCashBalances(
   baseCurrency: string,
   warnings: string[]
 ): CashBalance[] {
-  return [...balances.entries()]
+  const cashBalances = [...balances.entries()]
     .filter(([, amount]) => Math.abs(amount) > 0.0000001)
     .map(([currency, amount]) => {
       const fxRate = getFxRate(currency, baseCurrency, fxRates, warnings);
@@ -283,6 +284,16 @@ function buildCashBalances(
       };
     })
     .sort((left, right) => right.amountBase - left.amountBase);
+
+  cashBalances
+    .filter((balance) => balance.amount < 0)
+    .forEach((balance) => {
+      warnings.push(
+        `${balance.currency}: cash deficit detected. Negative cash is treated as borrowed cash or margin used.`
+      );
+    });
+
+  return cashBalances;
 }
 
 function buildPortfolioHistory(
@@ -516,27 +527,18 @@ function getFxRate(
   return rate;
 }
 
-function buildAllocationByAsset(holdings: Holding[], cashBalances: CashBalance[]) {
-  const slices = holdings.map((holding, index) => ({
+function buildAllocationByAsset(holdings: Holding[]) {
+  const total = holdings.reduce((sum, holding) => sum + holding.marketValueBase, 0);
+
+  return holdings.map((holding, index) => ({
     name: holding.asset,
     value: holding.marketValueBase,
-    weightPct: holding.weightPct,
+    weightPct: total > 0 ? (holding.marketValueBase / total) * 100 : 0,
     color: ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]
-  }));
-
-  cashBalances.forEach((balance, index) => {
-    slices.push({
-      name: `Cash ${balance.currency}`,
-      value: balance.amountBase,
-      weightPct: balance.weightPct,
-      color: ALLOCATION_COLORS[(holdings.length + index) % ALLOCATION_COLORS.length]
-    });
-  });
-
-  return slices.sort((left, right) => right.value - left.value);
+  })).sort((left, right) => right.value - left.value);
 }
 
-function buildAllocationByClass(holdings: Holding[], cashBalances: CashBalance[]) {
+function buildAllocationByClass(holdings: Holding[]) {
   const grouped = new Map<string, number>();
 
   holdings.forEach((holding) => {
@@ -545,13 +547,6 @@ function buildAllocationByClass(holdings: Holding[], cashBalances: CashBalance[]
       (grouped.get(holding.assetClass) ?? 0) + holding.marketValueBase
     );
   });
-
-  if (cashBalances.length > 0) {
-    grouped.set(
-      "CASH",
-      cashBalances.reduce((sum, balance) => sum + balance.amountBase, 0)
-    );
-  }
 
   const total = [...grouped.values()].reduce((sum, value) => sum + value, 0);
 

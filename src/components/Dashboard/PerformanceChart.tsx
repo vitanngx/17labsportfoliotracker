@@ -15,13 +15,12 @@ import {
   formatCurrency,
   formatPercent
 } from "@/lib/formatters";
-import { TIMEFRAME_CONFIG } from "@/lib/marketData/timeframes";
+import { getTimeframeWindow, TIMEFRAME_CONFIG } from "@/lib/marketData/timeframes";
 import {
   HistoricalNavResponse,
   PortfolioHistoryPoint,
   TimeframeKey
 } from "@/types/portfolio";
-import SectionCard from "@/components/Dashboard/SectionCard";
 
 interface PerformanceChartProps {
   currency: string;
@@ -39,6 +38,18 @@ export default function PerformanceChart({
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [warnings, setWarnings] = React.useState<string[]>([]);
+  const filteredChartData = React.useMemo(
+    () => trimChartDataToTimeframe(chartData, activeTimeframe),
+    [activeTimeframe, chartData]
+  );
+  const chartSeries = React.useMemo(
+    () =>
+      filteredChartData.map((point) => ({
+        ...point,
+        timestamp: new Date(point.date).getTime()
+      })),
+    [filteredChartData]
+  );
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -46,6 +57,8 @@ export default function PerformanceChart({
     async function loadHistory() {
       setLoading(true);
       setError(null);
+      setChartData([]);
+      setWarnings([]);
 
       try {
         const response = await fetch(`/api/portfolio/history?timeframe=${activeTimeframe}`, {
@@ -60,6 +73,14 @@ export default function PerformanceChart({
 
         setChartData(payload.history);
         setWarnings(payload.warnings);
+
+        if (process.env.NODE_ENV !== "production") {
+          console.log(
+            activeTimeframe,
+            payload.history[0]?.date,
+            payload.history[payload.history.length - 1]?.date
+          );
+        }
       } catch (fetchError) {
         if (controller.signal.aborted) {
           return;
@@ -86,20 +107,21 @@ export default function PerformanceChart({
 
   const performanceIndicators = React.useMemo(
     () => [
-      { label: "Today", value: computePeriodReturn(chartData, 1) },
-      { label: "7D", value: computePeriodReturn(chartData, 7) },
-      { label: "30D", value: computePeriodReturn(chartData, 30) }
+      { label: "Today", value: computePeriodReturn(filteredChartData, 1) },
+      { label: "7D", value: computePeriodReturn(filteredChartData, 7) },
+      { label: "30D", value: computePeriodReturn(filteredChartData, 30) }
     ],
-    [chartData]
+    [filteredChartData]
   );
 
   return (
-    <SectionCard
-      title="Portfolio Value"
-      subtitle="Approximate historical NAV built from current holdings, cash balances, and timeframe-specific market data."
-      className={`chart-shell p-5 md:p-5 ${className}`}
-      actions={
-        <div className="flex flex-wrap gap-2">
+    <section className={`surface-panel chart-shell flex h-full flex-col rounded-[28px] p-5 ${className}`}>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="section-title text-mist">Portfolio Value</p>
+          <p className="mt-1 text-xs text-mist">Approx. NAV</p>
+        </div>
+        <div className="flex rounded-full border border-line bg-black/20 p-1">
           {TIMEFRAMES.map((timeframe) => {
             const isActive = timeframe === activeTimeframe;
 
@@ -108,10 +130,10 @@ export default function PerformanceChart({
                 key={timeframe}
                 type="button"
                 onClick={() => setActiveTimeframe(timeframe)}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold tracking-[0.14em] transition-all ${
+                className={`h-8 min-w-12 rounded-full px-3 text-xs font-semibold transition-all ${
                   isActive
-                    ? "border border-accent/40 bg-accent/15 text-ink shadow-[0_0_0_1px_rgba(120,201,255,0.08)]"
-                    : "border border-line bg-white/[0.02] text-mist hover:border-accent/30 hover:text-ink"
+                    ? "bg-ink text-[#080d14] shadow-[0_8px_22px_rgba(237,242,247,0.16)]"
+                    : "text-mist hover:bg-white/[0.05] hover:text-ink"
                 }`}
               >
                 {timeframe}
@@ -119,77 +141,85 @@ export default function PerformanceChart({
             );
           })}
         </div>
-      }
-    >
-      <div className="space-y-4">
-        <div className="grid gap-2 sm:grid-cols-3">
-          {performanceIndicators.map((indicator) => (
-            <div
-              key={indicator.label}
-              className="rounded-2xl border border-line bg-white/[0.02] px-3 py-2"
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {performanceIndicators.map((indicator) => (
+          <div
+            key={indicator.label}
+            className="flex items-center gap-2 rounded-full border border-line bg-white/[0.02] px-3 py-1.5"
+          >
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mist">
+              {indicator.label}
+            </span>
+            <span
+              className={`mono text-xs ${
+                indicator.value === null
+                  ? "text-mist"
+                  : indicator.value >= 0
+                    ? "text-positive"
+                    : "text-negative"
+              }`}
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-mist">
-                {indicator.label}
-              </p>
-              <p
-                className={`mt-1 mono text-sm ${
-                  indicator.value === null
-                    ? "text-mist"
-                    : indicator.value >= 0
-                      ? "text-positive"
-                      : "text-negative"
-                }`}
-              >
-                {indicator.value === null ? "N/A" : formatPercent(indicator.value)}
-              </p>
-            </div>
-          ))}
-        </div>
-        {warnings.length > 0 ? <p className="text-xs text-mist">{warnings[0]}</p> : null}
-        <div className="h-[236px] transition-all duration-300">
+              {indicator.value === null ? "N/A" : formatPercent(indicator.value)}
+            </span>
+          </div>
+        ))}
+        {warnings.length > 0 ? (
+          <div className="min-w-0 flex-1 truncate text-xs text-mist">
+            {warnings[0]}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 h-[248px] transition-all duration-300">
           {loading ? (
-            <div className="flex h-full items-center justify-center rounded-[22px] border border-line bg-white/[0.02] text-sm text-mist">
+            <div className="flex h-full items-center justify-center rounded-[18px] border border-line bg-white/[0.02] text-sm text-mist">
               Loading {activeTimeframe} NAV...
             </div>
           ) : error ? (
-            <div className="flex h-full items-center justify-center rounded-[22px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
+            <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
               {error}
             </div>
-          ) : chartData.length < 2 ? (
-            <div className="flex h-full items-center justify-center rounded-[22px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
+          ) : chartSeries.length < 2 ? (
+            <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
               No approximate NAV data is available for the selected timeframe yet.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 4, right: 6, left: -20, bottom: 0 }}>
+              <AreaChart data={chartSeries} margin={{ top: 8, right: 10, left: -18, bottom: 0 }}>
                 <defs>
                   <linearGradient id="portfolioArea" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="#78C9FF" stopOpacity={0.42} />
-                    <stop offset="100%" stopColor="#78C9FF" stopOpacity={0.04} />
+                    <stop offset="0%" stopColor="#78C9FF" stopOpacity={0.28} />
+                    <stop offset="100%" stopColor="#78C9FF" stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis
-                  dataKey="date"
+                  dataKey="timestamp"
+                  type="number"
+                  scale="time"
+                  domain={["dataMin", "dataMax"]}
                   minTickGap={28}
                   tickMargin={8}
-                  tickFormatter={(value) => formatAxisLabel(String(value), activeTimeframe)}
+                  tickFormatter={(value) => formatAxisLabel(Number(value), activeTimeframe)}
                 />
                 <YAxis
                   width={82}
                   tickFormatter={(value) => formatCompactCurrency(Number(value), currency)}
                 />
                 <Tooltip
-                  contentStyle={{
-                    background: "rgba(7, 11, 17, 0.96)",
-                    border: "1px solid rgba(151, 171, 190, 0.18)",
-                    borderRadius: "16px",
-                    color: "#edf2f7"
+                  cursor={{
+                    stroke: "rgba(237, 242, 247, 0.24)",
+                    strokeDasharray: "4 4"
                   }}
-                  itemStyle={{ color: "#edf2f7" }}
-                  labelStyle={{ color: "#edf2f7" }}
-                  formatter={(value: number) => formatCurrency(Number(value), currency)}
-                  labelFormatter={(label) => formatTooltipLabel(String(label), activeTimeframe)}
+                  content={(props) => (
+                    <NavTooltip
+                      {...props}
+                      currency={currency}
+                      timeframe={activeTimeframe}
+                    />
+                  )}
                 />
                 <Area
                   type="monotone"
@@ -197,16 +227,34 @@ export default function PerformanceChart({
                   stroke="#78C9FF"
                   strokeWidth={2}
                   fill="url(#portfolioArea)"
+                  dot={false}
+                  activeDot={{
+                    r: 4,
+                    strokeWidth: 2,
+                    stroke: "#edf2f7",
+                    fill: "#78C9FF"
+                  }}
                   isAnimationActive
                   animationDuration={260}
                 />
               </AreaChart>
             </ResponsiveContainer>
           )}
-        </div>
       </div>
-    </SectionCard>
+    </section>
   );
+}
+
+function trimChartDataToTimeframe(
+  data: PortfolioHistoryPoint[],
+  timeframe: TimeframeKey
+) {
+  const { start, end } = getTimeframeWindow(timeframe);
+
+  return data.filter((point) => {
+    const timestamp = new Date(point.date).getTime();
+    return timestamp >= start.getTime() && timestamp <= end.getTime();
+  });
 }
 
 function computePeriodReturn(data: PortfolioHistoryPoint[], days: number) {
@@ -227,11 +275,43 @@ function computePeriodReturn(data: PortfolioHistoryPoint[], days: number) {
   return ((latest.totalValueBase - baseline.totalValueBase) / baseline.totalValueBase) * 100;
 }
 
-function formatAxisLabel(value: string, timeframe: TimeframeKey) {
+function formatAxisLabel(value: number, timeframe: TimeframeKey) {
   const date = new Date(value);
 
   if (timeframe === "1D") {
     return new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit"
+    }).format(date);
+  }
+
+  if (timeframe === "7D") {
+    return new Intl.DateTimeFormat("en-GB", {
+      month: "short",
+      day: "numeric"
+    }).format(date);
+  }
+
+  if (timeframe === "1Y") {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      year: "numeric"
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric"
+  }).format(date);
+}
+
+function formatTooltipLabel(value: number, timeframe: TimeframeKey) {
+  const date = new Date(value);
+
+  if (timeframe === "1D") {
+    return new Intl.DateTimeFormat("en-GB", {
+      month: "short",
+      day: "numeric",
       hour: "2-digit",
       minute: "2-digit"
     }).format(date);
@@ -245,21 +325,10 @@ function formatAxisLabel(value: string, timeframe: TimeframeKey) {
     }).format(date);
   }
 
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric"
-  }).format(date);
-}
-
-function formatTooltipLabel(value: string, timeframe: TimeframeKey) {
-  const date = new Date(value);
-
-  if (timeframe === "1D" || timeframe === "7D" || timeframe === "1M") {
+  if (timeframe === "1M") {
     return new Intl.DateTimeFormat("en-GB", {
       month: "short",
       day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
     }).format(date);
   }
 
@@ -268,4 +337,36 @@ function formatTooltipLabel(value: string, timeframe: TimeframeKey) {
     day: "numeric",
     year: "numeric"
   }).format(date);
+}
+
+interface NavTooltipProps {
+  active?: boolean;
+  label?: number;
+  payload?: Array<{ value?: unknown }>;
+  currency: string;
+  timeframe: TimeframeKey;
+}
+
+function NavTooltip({
+  active,
+  label,
+  payload,
+  currency,
+  timeframe
+}: NavTooltipProps) {
+  if (!active || label === undefined || !payload?.length) {
+    return null;
+  }
+
+  const rawValue = payload[0]?.value;
+  const navValue = Array.isArray(rawValue) ? Number(rawValue[0]) : Number(rawValue);
+
+  return (
+    <div className="rounded-2xl border border-line bg-[#070b11]/95 px-4 py-3 shadow-[0_14px_40px_rgba(0,0,0,0.36)]">
+      <p className="text-xs text-mist">{formatTooltipLabel(label, timeframe)}</p>
+      <p className="mt-2 mono text-sm text-ink">
+        NAV {Number.isFinite(navValue) ? formatCurrency(navValue, currency) : "N/A"}
+      </p>
+    </div>
+  );
 }

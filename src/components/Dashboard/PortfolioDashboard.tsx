@@ -186,6 +186,7 @@ export default function PortfolioDashboard({
   }
 
   const { portfolio, transactions, settings, marketWarnings } = payload;
+  const systemWarnings = [...portfolio.warnings, ...marketWarnings];
 
   return (
     <main className="relative overflow-hidden px-4 pb-16 pt-6 md:px-8 xl:px-10">
@@ -228,23 +229,28 @@ export default function PortfolioDashboard({
           </div>
         </header>
 
-        {marketWarnings.length > 0 || adminError ? (
+        {systemWarnings.length > 0 || adminError ? (
           <section className="surface-panel-soft rounded-[24px] p-5">
             <p className="section-title text-gold">System Notes</p>
             <div className="mt-3 space-y-2 text-sm text-mist">
               {adminError ? <p className="text-negative">{adminError}</p> : null}
-              {marketWarnings.map((warning) => (
+              {systemWarnings.map((warning) => (
                 <p key={warning}>{warning}</p>
               ))}
             </div>
           </section>
         ) : null}
 
-        <section className="grid gap-4 xl:grid-cols-4">
+        <section className="grid gap-4 xl:grid-cols-5">
           <MetricCard
-            label="Portfolio Value"
+            label="Net Portfolio Value"
             value={formatCurrency(portfolio.summary.totalPortfolioValueBase, settings.baseCurrency)}
-            detail={`Holdings ${formatCurrency(portfolio.summary.totalHoldingsValueBase, settings.baseCurrency)} • Cash ${formatCurrency(portfolio.summary.totalCashValueBase, settings.baseCurrency)}`}
+            detail={`Gross exposure ${formatCurrency(portfolio.summary.grossExposureBase, settings.baseCurrency)} • Cash ${formatCurrency(portfolio.summary.totalCashValueBase, settings.baseCurrency)}`}
+          />
+          <MetricCard
+            label="Gross Exposure"
+            value={formatCurrency(portfolio.summary.grossExposureBase, settings.baseCurrency)}
+            detail="Total holdings market value before cash surplus or deficit is applied."
           />
           <MetricCard
             label="Total Return"
@@ -292,7 +298,7 @@ export default function PortfolioDashboard({
           <div className="xl:col-span-5">
             <AllocationDonut
               title="Allocation by Asset"
-              subtitle="Holdings and cash translated into the base currency."
+              subtitle="Holdings-only allocation translated into the base currency. Cash deficits are tracked separately."
               data={portfolio.summary.allocationByAsset}
               currency={settings.baseCurrency}
               className="h-full"
@@ -306,7 +312,7 @@ export default function PortfolioDashboard({
           <div className="xl:col-span-6">
             <AllocationDonut
               title="Allocation by Asset Class"
-              subtitle="Portfolio concentration by sleeve including cash."
+              subtitle="Holdings-only concentration by asset class. Cash balances are shown separately."
               data={portfolio.summary.allocationByClass}
               currency={settings.baseCurrency}
               className="h-full"

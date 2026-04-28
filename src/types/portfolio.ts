@@ -149,6 +149,7 @@ export interface PortfolioSummary {
   totalPortfolioValueBase: number;
   totalHoldingsValueBase: number;
   totalCashValueBase: number;
+  grossExposureBase: number;
   totalInvestedCapitalBase: number;
   totalUnrealizedPnlBase: number;
   totalRealizedPnlBase: number;

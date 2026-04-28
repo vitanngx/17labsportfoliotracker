@@ -1,10 +1,15 @@
 import { buildPortfolioState } from "@/lib/calculations/portfolio";
-import { getSettings, listTransactions } from "@/lib/db";
+import {
+  getHistoricalNavCache,
+  getSettings,
+  listTransactions,
+  setHistoricalNavCache
+} from "@/lib/db";
 import {
   fetchAndCacheMarketBundle,
   fetchHistoricalMarketBundle
 } from "@/lib/marketData/server";
-import { TIMEFRAME_CONFIG } from "@/lib/marketData/timeframes";
+import { getTimeframeWindow, TIMEFRAME_CONFIG } from "@/lib/marketData/timeframes";
 import { buildAssetKey, dedupeMarketAssets } from "@/lib/marketData/symbols";
 import {
   CashBalance,
@@ -49,6 +54,17 @@ export async function buildHistoricalNavPayload(
 ): Promise<HistoricalNavResponse> {
   const transactions = listTransactions();
   const settings = getSettings();
+  const cacheKey = buildHistoricalNavCacheKey(
+    timeframe,
+    settings.baseCurrency,
+    transactions
+  );
+  const cached = getFreshHistoricalNavCache(cacheKey, timeframe);
+
+  if (cached) {
+    return cached;
+  }
+
   const requestAssets = dedupeMarketAssets(
     transactions
       .filter((transaction) => transaction.type === "BUY" || transaction.type === "SELL")
@@ -89,14 +105,18 @@ export async function buildHistoricalNavPayload(
     historicalBundle.fxRates,
     settings.baseCurrency
   );
-
-  return {
+  const trimmedHistory = trimHistoryToTimeframe(history, timeframe);
+  const payload = {
     ok: true,
     timeframe,
     approximate: true,
-    history,
+    history: trimmedHistory,
     warnings: historicalBundle.warnings
-  };
+  } satisfies HistoricalNavResponse;
+
+  setHistoricalNavCache(cacheKey, payload);
+
+  return payload;
 }
 
 function buildApproximateHistoricalNav(
@@ -218,4 +238,73 @@ function findFxRateAtTimestamp(
   }
 
   return findHistoryValueAtTimestamp(timestamp, fxRate.history, fxRate.rate ?? 1);
+}
+
+function trimHistoryToTimeframe(
+  history: PortfolioHistoryPoint[],
+  timeframe: TimeframeKey
+) {
+  const { start, end } = getTimeframeWindow(timeframe);
+
+  return history.filter((point) => {
+    const timestamp = new Date(point.date).getTime();
+    return timestamp >= start.getTime() && timestamp <= end.getTime();
+  });
+}
+
+function getFreshHistoricalNavCache(cacheKey: string, timeframe: TimeframeKey) {
+  const cached = getHistoricalNavCache(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  const updatedAt = new Date(cached.updatedAt).getTime();
+  if (!Number.isFinite(updatedAt)) {
+    return null;
+  }
+
+  if (Date.now() - updatedAt > getHistoricalNavCacheTtlMs(timeframe)) {
+    return null;
+  }
+
+  return cached.payload;
+}
+
+function getHistoricalNavCacheTtlMs(timeframe: TimeframeKey) {
+  const minutesByTimeframe: Record<TimeframeKey, number> = {
+    "1D": 2,
+    "7D": 5,
+    "1M": 15,
+    "3M": 30,
+    "1Y": 180
+  };
+
+  return minutesByTimeframe[timeframe] * 60 * 1000;
+}
+
+function buildHistoricalNavCacheKey(
+  timeframe: TimeframeKey,
+  baseCurrency: string,
+  transactions: Array<{ id: string; updatedAt?: string }>
+) {
+  const fingerprint = transactions
+    .map((transaction) => `${transaction.id}:${transaction.updatedAt ?? ""}`)
+    .join("|");
+
+  return [
+    "historical-nav",
+    baseCurrency.toUpperCase(),
+    timeframe,
+    hashString(fingerprint)
+  ].join(":");
+}
+
+function hashString(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash.toString(36);
 }
