@@ -68,7 +68,66 @@ export async function fetchAndCacheMarketBundle(
   };
 }
 
-async function runPythonBridge(assets: MarketRequestAsset[]): Promise<MarketDataResponse> {
+export async function fetchHistoricalMarketBundle(
+  assets: MarketRequestAsset[],
+  baseCurrency: string,
+  options: { range: string; interval: string }
+) {
+  const cachedQuotes = getMarketCacheEntries() as Record<string, MarketQuote>;
+  const uniqueAssets = dedupeByKey(assets, (asset) =>
+    buildAssetKey(asset.asset, asset.assetClass)
+  );
+  const fxRequests = buildFxRequests(uniqueAssets, baseCurrency);
+  const fxAssets = dedupeByKey(
+    fxRequests.flatMap((request) => [
+      {
+        asset: request.symbol,
+        assetClass: "FX" as const,
+        currency: request.quoteCurrency
+      },
+      {
+        asset: request.inverseSymbol,
+        assetClass: "FX" as const,
+        currency: request.fromCurrency
+      }
+    ]),
+    (asset) => buildAssetKey(asset.asset, asset.assetClass)
+  );
+  const response = await runPythonBridge([...uniqueAssets, ...fxAssets], options);
+
+  const warnings: string[] = [...response.errors];
+  const quotes: Record<string, MarketQuote> = {};
+  const fxRates: Record<string, FxRate> = {};
+
+  for (const asset of uniqueAssets) {
+    const key = buildAssetKey(asset.asset, asset.assetClass);
+    quotes[key] = mergeQuoteWithCache(asset, response.quotes[key], cachedQuotes[key], warnings);
+  }
+
+  for (const request of fxRequests) {
+    const directKey = buildAssetKey(request.symbol, "FX");
+    const inverseKey = buildAssetKey(request.inverseSymbol, "FX");
+    const direct = response.quotes[directKey];
+    const inverse = response.quotes[inverseKey];
+    fxRates[`${request.fromCurrency}:${request.toCurrency}`] = computeFxRate(
+      request.fromCurrency,
+      request.toCurrency,
+      direct,
+      inverse
+    );
+  }
+
+  return {
+    quotes,
+    fxRates,
+    warnings
+  };
+}
+
+async function runPythonBridge(
+  assets: MarketRequestAsset[],
+  options?: { range?: string; interval?: string }
+): Promise<MarketDataResponse> {
   if (assets.length === 0) {
     return {
       ok: true,
@@ -80,7 +139,9 @@ async function runPythonBridge(assets: MarketRequestAsset[]): Promise<MarketData
   const scriptPath = path.join(process.cwd(), "python", "market_data.py");
   const payload = JSON.stringify({
     assets,
-    daysBack: 180
+    daysBack: 180,
+    range: options?.range,
+    interval: options?.interval
   });
 
   return new Promise((resolve, reject) => {

@@ -1,4 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import React from "react";
 import { AllocationSlice } from "@/types/portfolio";
 import { formatCompactCurrency, formatCurrency } from "@/lib/formatters";
 import SectionCard from "@/components/Dashboard/SectionCard";
@@ -22,13 +23,14 @@ export default function AllocationDonut({
   chartHeightClass = "h-[260px]",
   legendLimit
 }: AllocationDonutProps) {
-  const visibleLegendItems = legendLimit ? data.slice(0, legendLimit) : data;
-  const remainingLegendCount = Math.max(data.length - visibleLegendItems.length, 0);
+  const [activeIndex, setActiveIndex] = React.useState<number | null>(null);
+  const legendPreviewCount = legendLimit ?? data.length;
+  const legendHeightClass = legendPreviewCount <= 5 ? "h-[236px]" : "h-[260px]";
 
   return (
-    <SectionCard title={title} subtitle={subtitle} className={className}>
-      <div className="grid flex-1 gap-5 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-center">
-        <div className={chartHeightClass}>
+    <SectionCard title={title} subtitle={subtitle} className={`p-5 md:p-5 ${className}`}>
+      <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_230px] xl:items-start">
+        <div className={`${chartHeightClass} xl:-mt-2`}>
           {data.length === 0 ? (
             <div className="flex h-full items-center justify-center rounded-[22px] border border-dashed border-line bg-white/[0.02] text-sm text-mist">
               Allocation will appear after positions or cash balances exist.
@@ -36,9 +38,25 @@ export default function AllocationDonut({
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" innerRadius={68} outerRadius={100} paddingAngle={3}>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={68}
+                  outerRadius={98}
+                  paddingAngle={3}
+                  activeIndex={activeIndex ?? undefined}
+                  onMouseEnter={(_, index) => setActiveIndex(index)}
+                  onMouseLeave={() => setActiveIndex(null)}
+                >
                   {data.map((slice) => (
-                    <Cell key={slice.name} fill={slice.color} />
+                    <Cell
+                      key={slice.name}
+                      fill={slice.color}
+                      fillOpacity={activeIndex === null || data[activeIndex]?.name === slice.name ? 1 : 0.42}
+                      stroke={activeIndex !== null && data[activeIndex]?.name === slice.name ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.22)"}
+                      strokeWidth={activeIndex !== null && data[activeIndex]?.name === slice.name ? 2.4 : 1.2}
+                    />
                   ))}
                 </Pie>
                 <Tooltip
@@ -57,27 +75,30 @@ export default function AllocationDonut({
             </ResponsiveContainer>
           )}
         </div>
-        <div className="space-y-2">
-          {visibleLegendItems.map((slice) => (
-            <div
-              key={slice.name}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-white/[0.02] px-3.5 py-2.5"
-            >
-              <div className="flex items-center gap-3">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{slice.name}</p>
-                  <p className="text-xs text-mist">{slice.weightPct.toFixed(2)}%</p>
+        <div className={`min-h-0 overflow-y-auto rounded-2xl border border-line/80 bg-white/[0.015] p-2 ${legendHeightClass}`}>
+          <div className="space-y-1.5">
+            {data.map((slice, index) => (
+              <div
+                key={slice.name}
+                className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 transition-all ${
+                  activeIndex !== null && data[activeIndex]?.name === slice.name
+                    ? "border-accent/35 bg-white/[0.06] shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
+                    : "border-line bg-white/[0.02] hover:border-accent/25 hover:bg-white/[0.04]"
+                }`}
+                onMouseEnter={() => setActiveIndex(index)}
+                onMouseLeave={() => setActiveIndex(null)}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink">{slice.name}</p>
+                    <p className="text-[11px] text-mist">{slice.weightPct.toFixed(2)}%</p>
+                  </div>
                 </div>
+                <p className="shrink-0 text-sm text-ink">{formatCompactCurrency(slice.value, currency)}</p>
               </div>
-              <p className="shrink-0 text-sm text-ink">{formatCompactCurrency(slice.value, currency)}</p>
-            </div>
-          ))}
-          {remainingLegendCount > 0 ? (
-            <div className="rounded-2xl border border-dashed border-line bg-white/[0.015] px-3.5 py-2.5 text-xs text-mist">
-              +{remainingLegendCount} more assets shown in the donut chart
-            </div>
-          ) : null}
+            ))}
+          </div>
         </div>
       </div>
     </SectionCard>

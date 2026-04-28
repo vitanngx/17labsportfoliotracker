@@ -133,6 +133,17 @@ export interface PortfolioHistoryPoint {
   dividendIncomeBase: number;
 }
 
+export type TimeframeKey = "1D" | "7D" | "1M" | "3M" | "1Y";
+
+export interface HistoricalNavResponse {
+  ok: boolean;
+  timeframe: TimeframeKey;
+  approximate: boolean;
+  history: PortfolioHistoryPoint[];
+  warnings: string[];
+  error?: string;
+}
+
 export interface PortfolioSummary {
   baseCurrency: string;
   totalPortfolioValueBase: number;

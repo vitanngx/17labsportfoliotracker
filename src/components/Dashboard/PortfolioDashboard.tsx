@@ -201,8 +201,8 @@ export default function PortfolioDashboard({
               </h1>
               <p className="mt-4 max-w-3xl text-sm leading-6 text-mist md:text-base">
                 {isAdminMode
-                  ? "Manage transactions, change the reporting currency, import CSV data, and review the same analytics the public dashboard exposes in read-only mode."
-                  : "Read-only portfolio analytics with normalized FX reporting, holdings, cash, allocation, and performance sourced from the admin-managed ledger."}
+                  ? "I built this application to track my personal investment portfolio, monitor transactions, analyze allocation, and review portfolio performance over time."
+                  : "I built this application to track my personal investment portfolio, monitor transactions, analyze allocation, and review portfolio performance over time."}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -285,7 +285,6 @@ export default function PortfolioDashboard({
         <section className="grid gap-6 xl:grid-cols-12 xl:items-stretch">
           <div className="xl:col-span-7">
             <PerformanceChart
-              data={portfolio.history}
               currency={settings.baseCurrency}
               className="h-full"
             />
@@ -297,8 +296,8 @@ export default function PortfolioDashboard({
               data={portfolio.summary.allocationByAsset}
               currency={settings.baseCurrency}
               className="h-full"
-              chartHeightClass="h-[320px]"
-              legendLimit={7}
+              chartHeightClass="h-[236px]"
+              legendLimit={5}
             />
           </div>
         </section>

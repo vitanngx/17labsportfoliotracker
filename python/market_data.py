@@ -5,6 +5,7 @@ import sys
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from io import StringIO
+from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -41,7 +42,67 @@ def safe_float(value):
         return None
 
 
-def fetch_with_yfinance(symbol: str, days_back: int):
+def normalize_interval(interval: Optional[str]) -> str:
+    return (interval or "1d").lower()
+
+
+def map_fetch_interval(interval: str) -> str:
+    return {
+        "15m": "15m",
+        "1h": "60m",
+        "4h": "60m",
+        "1d": "1d",
+        "3d": "1d",
+    }.get(interval, "1d")
+
+
+def interval_to_minutes(interval: str) -> int:
+    return {
+        "15m": 15,
+        "60m": 60,
+        "1h": 60,
+        "4h": 240,
+        "1d": 1440,
+        "3d": 4320,
+    }.get(interval, 1440)
+
+
+def format_history_timestamp(value, interval: str) -> str:
+    if hasattr(value, "to_pydatetime"):
+        value = value.to_pydatetime()
+
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        value = value.astimezone(timezone.utc)
+        if interval in {"15m", "1h", "4h"}:
+            return value.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return value.strftime("%Y-%m-%d")
+
+    text = str(value)
+    return text[:19] if "T" in text else text[:10]
+
+
+def resample_history_points(history_points, requested_interval: str, fetch_interval: str):
+    if not history_points:
+        return history_points
+
+    requested_minutes = interval_to_minutes(requested_interval)
+    fetch_minutes = interval_to_minutes(fetch_interval)
+
+    if requested_minutes <= fetch_minutes:
+        return history_points
+
+    step = max(1, requested_minutes // fetch_minutes)
+    sampled = [history_points[index] for index in range(0, len(history_points), step)]
+
+    if sampled[-1]["date"] != history_points[-1]["date"]:
+        sampled.append(history_points[-1])
+
+    return sampled
+
+
+def fetch_with_yfinance(symbol: str, days_back: int, history_range: str, history_interval: str):
     try:
         import yfinance as yf
     except Exception:
@@ -49,7 +110,12 @@ def fetch_with_yfinance(symbol: str, days_back: int):
 
     try:
         ticker = yf.Ticker(symbol)
-        history = ticker.history(period=f"{max(days_back, 7)}d", interval="1d", auto_adjust=False)
+        fetch_interval = map_fetch_interval(history_interval)
+        history = ticker.history(
+            period=history_range or f"{max(days_back, 7)}d",
+            interval=fetch_interval,
+            auto_adjust=False,
+        )
 
         if history.empty:
             return None
@@ -63,13 +129,15 @@ def fetch_with_yfinance(symbol: str, days_back: int):
             closes.append(close_price)
             history_points.append(
                 {
-                    "date": idx.strftime("%Y-%m-%d"),
+                    "date": format_history_timestamp(idx, fetch_interval),
                     "close": close_price,
                 }
             )
 
         if not history_points:
             return None
+
+        history_points = resample_history_points(history_points, history_interval, fetch_interval)
 
         price = closes[-1]
         previous_close = closes[-2] if len(closes) > 1 else closes[-1]
@@ -95,10 +163,11 @@ def fetch_with_yfinance(symbol: str, days_back: int):
         return None
 
 
-def fetch_with_yahoo_http(symbol: str, days_back: int):
+def fetch_with_yahoo_http(symbol: str, days_back: int, history_range: str, history_interval: str):
+    fetch_interval = map_fetch_interval(history_interval)
     url = (
         f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
-        f"?range={max(days_back, 7)}d&interval=1d&includePrePost=false&events=div%2Csplits"
+        f"?range={history_range or f'{max(days_back, 7)}d'}&interval={fetch_interval}&includePrePost=false&events=div%2Csplits"
     )
     request = Request(
         url,
@@ -135,13 +204,17 @@ def fetch_with_yahoo_http(symbol: str, days_back: int):
         cleaned_closes.append(close_price)
         history.append(
             {
-                "date": datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d"),
+                "date": format_history_timestamp(
+                    datetime.fromtimestamp(timestamp, tz=timezone.utc), fetch_interval
+                ),
                 "close": close_price,
             }
         )
 
     if not history:
         return None
+
+    history = resample_history_points(history, history_interval, fetch_interval)
 
     return {
         "price": safe_float(meta.get("regularMarketPrice")) or history[-1]["close"],
@@ -154,9 +227,14 @@ def fetch_with_yahoo_http(symbol: str, days_back: int):
     }
 
 
-def fetch_with_vnstock(symbol: str, days_back: int):
+def fetch_with_vnstock(symbol: str, days_back: int, history_interval: str):
     start_date = (datetime.now() - timedelta(days=max(days_back, 30))).strftime("%Y-%m-%d")
     end_date = datetime.now().strftime("%Y-%m-%d")
+    warning = None
+
+    if history_interval in {"15m", "1h", "4h"}:
+        warning = f"{symbol}: vnstock intraday history unavailable, fell back to daily data."
+        history_interval = "1d"
 
     try:
         with redirect_stdout(StringIO()):
@@ -176,7 +254,7 @@ def fetch_with_vnstock(symbol: str, days_back: int):
                     continue
                 history.append(
                     {
-                        "date": str(date_value)[:10],
+                        "date": format_history_timestamp(date_value, history_interval),
                         "close": close_price,
                     }
                 )
@@ -189,6 +267,7 @@ def fetch_with_vnstock(symbol: str, days_back: int):
                     "as_of": datetime.now(timezone.utc).isoformat(),
                     "provider": "vnstock",
                     "history": history,
+                    "warning": warning,
                 }
         except Exception:
             pass
@@ -212,7 +291,7 @@ def fetch_with_vnstock(symbol: str, days_back: int):
                 continue
             history.append(
                 {
-                    "date": str(date_value)[:10],
+                    "date": format_history_timestamp(date_value, history_interval),
                     "close": close_price,
                 }
             )
@@ -227,33 +306,37 @@ def fetch_with_vnstock(symbol: str, days_back: int):
             "as_of": datetime.now(timezone.utc).isoformat(),
             "provider": "vnstock",
             "history": history,
+            "warning": warning,
         }
     except Exception:
         return None
 
 
-def fetch_quote(asset: dict, days_back: int):
+def fetch_quote(asset: dict, days_back: int, history_range: str, history_interval: str):
     raw_symbol, yahoo_symbol = normalize_symbol(asset["asset"], asset["assetClass"])
 
     result = None
     errors = []
+    warning = None
 
     if asset["assetClass"] == "VN_STOCK":
-        result = fetch_with_vnstock(raw_symbol, days_back)
+        result = fetch_with_vnstock(raw_symbol, days_back, history_interval)
         if result is None:
             errors.append("vnstock unavailable")
+        else:
+            warning = result.get("warning")
 
     if result is None:
-        result = fetch_with_yfinance(yahoo_symbol, days_back)
+        result = fetch_with_yfinance(yahoo_symbol, days_back, history_range, history_interval)
         if result is None:
             errors.append("yfinance unavailable")
 
     if result is None:
-        result = fetch_with_yahoo_http(yahoo_symbol, days_back)
+        result = fetch_with_yahoo_http(yahoo_symbol, days_back, history_range, history_interval)
         if result is None:
             errors.append("Yahoo HTTP fallback unavailable")
 
-    return {
+    quote = {
         "asset": asset["asset"],
         "assetClass": asset["assetClass"],
         "currency": result.get("currency") or asset["currency"] if result else asset["currency"],
@@ -266,22 +349,27 @@ def fetch_quote(asset: dict, days_back: int):
         "history": result.get("history") if result else [],
         "error": None if result else ", ".join(errors),
     }
+    return quote, warning
 
 
 def main():
     payload = json.load(sys.stdin)
     assets = payload.get("assets", [])
     days_back = int(payload.get("daysBack", 180))
+    history_range = payload.get("range") or f"{max(days_back, 7)}d"
+    history_interval = normalize_interval(payload.get("interval"))
     quotes = {}
     errors = []
 
     for asset in assets:
         key = f'{asset["assetClass"]}:{asset["asset"].strip().upper()}'
-        quote = fetch_quote(asset, days_back)
+        quote, warning = fetch_quote(asset, days_back, history_range, history_interval)
         quotes[key] = quote
 
         if quote["price"] is None:
             errors.append(f'{asset["asset"]}: {quote.get("error") or "market data unavailable"}')
+        elif warning:
+            errors.append(warning)
 
     response = {
         "ok": len(errors) < len(assets) if assets else True,
