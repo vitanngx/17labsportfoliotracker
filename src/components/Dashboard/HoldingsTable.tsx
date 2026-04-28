@@ -1,4 +1,5 @@
 import { formatCurrency, formatNumber, formatPercent, formatSignedCurrency } from "@/lib/formatters";
+import { getAssetDisplayName } from "@/lib/assetNames";
 import { Holding } from "@/types/portfolio";
 import SectionCard from "@/components/Dashboard/SectionCard";
 
@@ -8,10 +9,7 @@ interface HoldingsTableProps {
 
 export default function HoldingsTable({ holdings }: HoldingsTableProps) {
   return (
-    <SectionCard
-      title="Holdings"
-      subtitle="Open positions reconstructed from the transaction ledger and normalized into the portfolio base currency."
-    >
+    <SectionCard title="Holdings">
       <div className="overflow-x-auto">
         <table className="data-table min-w-full">
           <thead>
@@ -39,11 +37,7 @@ export default function HoldingsTable({ holdings }: HoldingsTableProps) {
                 <tr key={`${holding.assetClass}:${holding.asset}`}>
                   <td>
                     <p className="font-medium text-ink">{holding.asset}</p>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-mist">
-                      <span>{holding.assetClass.replaceAll("_", " ")}</span>
-                      <span>{holding.currency}</span>
-                      <span>{holding.priceProvider ?? "Quote"}</span>
-                    </div>
+                    <p className="mt-1 text-xs text-mist">{getAssetDisplayName(holding.asset)}</p>
                   </td>
                   <td className="mono text-sm text-ink">
                     {formatNumber(holding.quantity, { maximumFractionDigits: 6 })}

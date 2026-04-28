@@ -298,7 +298,6 @@ export default function PortfolioDashboard({
           <div className="xl:col-span-5">
             <AllocationDonut
               title="Allocation by Asset"
-              subtitle="Holdings-only allocation translated into the base currency. Cash deficits are tracked separately."
               data={portfolio.summary.allocationByAsset}
               currency={settings.baseCurrency}
               className="h-full"
@@ -312,7 +311,6 @@ export default function PortfolioDashboard({
           <div className="xl:col-span-6">
             <AllocationDonut
               title="Allocation by Asset Class"
-              subtitle="Holdings-only concentration by asset class. Cash balances are shown separately."
               data={portfolio.summary.allocationByClass}
               currency={settings.baseCurrency}
               className="h-full"
@@ -332,7 +330,6 @@ export default function PortfolioDashboard({
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
             <SectionCard
               title={editingTransaction ? "Edit Transaction" : "Add Transaction"}
-              subtitle="Only the admin dashboard exposes write operations."
             >
               <TransactionForm
                 onSubmit={handleTransactionSubmit}
@@ -342,7 +339,6 @@ export default function PortfolioDashboard({
             </SectionCard>
             <SectionCard
               title="Admin Controls"
-              subtitle="Change the base reporting currency or bulk import transactions from CSV."
             >
               <div className="space-y-5">
                 <label className="block">
@@ -369,9 +365,6 @@ export default function PortfolioDashboard({
                     onChange={(event) => void handleCsvImport(event)}
                     disabled={busy}
                   />
-                  <p className="mt-2 text-xs text-mist">
-                    Columns: `date,asset,assetClass,type,quantity,price,fees,currency,note`
-                  </p>
                 </label>
               </div>
             </SectionCard>

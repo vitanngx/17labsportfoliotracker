@@ -1,4 +1,5 @@
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/formatters";
+import { getAssetDisplayName } from "@/lib/assetNames";
 import { transactionCashAmount } from "@/lib/transactions";
 import { Transaction } from "@/types/portfolio";
 import SectionCard from "@/components/Dashboard/SectionCard";
@@ -24,10 +25,7 @@ export default function TransactionsTable({
   });
 
   return (
-    <SectionCard
-      title="Transaction History"
-      subtitle="This ledger is the single source of truth for holdings, cash, realized PnL, and history."
-    >
+    <SectionCard title="Transaction History">
       <div className="overflow-x-auto">
         <table className="data-table min-w-full">
           <thead>
@@ -58,9 +56,7 @@ export default function TransactionsTable({
                   <td className="text-sm text-ink">{formatDateLabel(transaction.date)}</td>
                   <td>
                     <p className="font-medium text-ink">{transaction.asset}</p>
-                    <p className="text-xs text-mist">
-                      {transaction.assetClass.replaceAll("_", " ")}
-                    </p>
+                    <p className="text-xs text-mist">{getAssetDisplayName(transaction.asset)}</p>
                   </td>
                   <td>
                     <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs font-semibold text-ink">

@@ -173,6 +173,25 @@ date,asset,assetClass,type,quantity,price,fees,currency,note
 2026-04-18,AAPL,US_STOCK,DIVIDEND,1,5,0,USD,quarterly dividend
 ```
 
+## Updating asset display names
+
+Asset names shown in tables and allocation legends are generated from a local registry instead of being hardcoded in UI components.
+
+Run:
+
+```bash
+npm run update-assets
+```
+
+This command:
+
+- reads asset symbols from the local SQLite transaction ledger
+- fetches asset metadata with `yfinance`
+- writes the local cache to `data/asset-names.json`
+- regenerates `src/lib/assets/assetName.js`
+
+If a market metadata lookup fails, the app falls back to the symbol so the UI does not break.
+
 ## Project structure
 
 ```text
@@ -181,10 +200,12 @@ src/
   components/
     Dashboard/
   lib/
+    assets/
     calculations/
     marketData/
   types/
 python/
+scripts/
 render/
 ```
 

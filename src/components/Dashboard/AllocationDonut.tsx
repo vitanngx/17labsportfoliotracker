@@ -1,12 +1,13 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import React from "react";
 import { AllocationSlice } from "@/types/portfolio";
+import { getAssetDisplayName } from "@/lib/assetNames";
 import { formatCompactCurrency, formatCurrency } from "@/lib/formatters";
 import SectionCard from "@/components/Dashboard/SectionCard";
 
 interface AllocationDonutProps {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   data: AllocationSlice[];
   currency: string;
   className?: string;
@@ -92,7 +93,9 @@ export default function AllocationDonut({
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-ink">{slice.name}</p>
-                    <p className="text-[11px] text-mist">{slice.weightPct.toFixed(2)}%</p>
+                    <p className="truncate text-[11px] text-mist">
+                      {getAllocationSubLabel(slice.name, slice.weightPct)}
+                    </p>
                   </div>
                 </div>
                 <p className="shrink-0 text-sm text-ink">{formatCompactCurrency(slice.value, currency)}</p>
@@ -103,4 +106,18 @@ export default function AllocationDonut({
       </div>
     </SectionCard>
   );
+}
+
+function getAllocationSubLabel(name: string, weightPct: number) {
+  const normalized = name.trim().toUpperCase();
+  const looksLikeAssetSymbol = normalized.includes(".") || normalized.includes("-");
+
+  if (looksLikeAssetSymbol) {
+    const displayName = getAssetDisplayName(name);
+    return displayName === name
+      ? `${weightPct.toFixed(2)}%`
+      : `${displayName} • ${weightPct.toFixed(2)}%`;
+  }
+
+  return `${weightPct.toFixed(2)}%`;
 }

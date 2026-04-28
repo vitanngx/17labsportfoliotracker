@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "update-assets": "python3 scripts/fetch_asset_names.py && node scripts/generate_asset_names.mjs"
   },
   "dependencies": {
     "next": "^14.2.0",

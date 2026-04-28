@@ -39,10 +39,6 @@ export default function AdminLoginForm() {
       <section className="surface-panel w-full max-w-md rounded-[32px] p-8">
         <p className="section-title text-accent">Admin Access</p>
         <h1 className="headline mt-3 text-4xl">Secure transaction control</h1>
-        <p className="mt-4 text-sm leading-6 text-mist">
-          Public users stay read-only on `/dashboard`. Enter the admin password to
-          manage the ledger on `/admin/dashboard`.
-        </p>
         <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
           <label className="block">
             <span className="field-label mb-2 block">Password</span>

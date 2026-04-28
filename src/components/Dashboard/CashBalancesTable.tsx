@@ -14,11 +14,7 @@ export default function CashBalancesTable({
   const negativeCashBalances = cashBalances.filter((balance) => balance.amount < 0);
 
   return (
-    <SectionCard
-      title="Cash Balances"
-      subtitle="Cash is tracked from deposits, withdrawals, dividends, and trade settlement flows."
-      className={className}
-    >
+    <SectionCard title="Cash Balances" className={className}>
       {negativeCashBalances.length > 0 ? (
         <div className="mb-4 rounded-2xl border border-negative/30 bg-negative/10 px-4 py-3 text-sm text-negative">
           Cash deficit detected. Negative cash is treated as borrowed cash or margin used and is already included in net portfolio value.

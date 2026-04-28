@@ -10,7 +10,6 @@ interface SectionCardProps {
 
 export default function SectionCard({
   title,
-  subtitle,
   actions,
   children,
   className = ""
@@ -20,7 +19,6 @@ export default function SectionCard({
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="section-title text-mist">{title}</p>
-          {subtitle ? <p className="mt-2 text-sm text-mist">{subtitle}</p> : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </div>

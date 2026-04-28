@@ -119,7 +119,6 @@ export default function PerformanceChart({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="section-title text-mist">Portfolio Value</p>
-          <p className="mt-1 text-xs text-mist">Approx. NAV</p>
         </div>
         <div className="flex rounded-full border border-line bg-black/20 p-1">
           {TIMEFRAMES.map((timeframe) => {
