@@ -21,6 +21,7 @@ import {
   PortfolioHistoryPoint,
   TimeframeKey
 } from "@/types/portfolio";
+import { useI18n } from "@/components/I18nProvider";
 
 interface PerformanceChartProps {
   currency: string;
@@ -33,6 +34,7 @@ export default function PerformanceChart({
   currency,
   className = ""
 }: PerformanceChartProps) {
+  const { t, intlLocale } = useI18n();
   const [activeTimeframe, setActiveTimeframe] = React.useState<TimeframeKey>("7D");
   const [chartData, setChartData] = React.useState<PortfolioHistoryPoint[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -68,7 +70,7 @@ export default function PerformanceChart({
         const payload = (await response.json()) as HistoricalNavResponse;
 
         if (!response.ok || !payload.ok) {
-          throw new Error(payload.error ?? "Unable to load historical NAV.");
+          throw new Error(t("chart.loadHistoryError"));
         }
 
         setChartData(payload.history);
@@ -89,7 +91,7 @@ export default function PerformanceChart({
         setChartData([]);
         setWarnings([]);
         setError(
-          fetchError instanceof Error ? fetchError.message : "Unable to load historical NAV."
+          fetchError instanceof Error ? fetchError.message : t("chart.loadHistoryError")
         );
       } finally {
         if (!controller.signal.aborted) {
@@ -103,22 +105,22 @@ export default function PerformanceChart({
     return () => {
       controller.abort();
     };
-  }, [activeTimeframe]);
+  }, [activeTimeframe, t]);
 
   const performanceIndicators = React.useMemo(
     () => [
-      { label: "Today", value: computePeriodReturn(filteredChartData, 1) },
+      { label: t("chart.today"), value: computePeriodReturn(filteredChartData, 1) },
       { label: "7D", value: computePeriodReturn(filteredChartData, 7) },
       { label: "30D", value: computePeriodReturn(filteredChartData, 30) }
     ],
-    [filteredChartData]
+    [filteredChartData, t]
   );
 
   return (
     <section className={`surface-panel chart-shell flex h-full flex-col rounded-[28px] p-5 ${className}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="section-title text-mist">Portfolio Value</p>
+          <p className="section-title text-mist">{t("sections.portfolioValue")}</p>
         </div>
         <div className="flex rounded-full border border-line bg-black/20 p-1">
           {TIMEFRAMES.map((timeframe) => {
@@ -160,7 +162,7 @@ export default function PerformanceChart({
                     : "text-negative"
               }`}
             >
-              {indicator.value === null ? "N/A" : formatPercent(indicator.value)}
+              {indicator.value === null ? t("common.notAvailable") : formatPercent(indicator.value, 2, intlLocale)}
             </span>
           </div>
         ))}
@@ -174,7 +176,7 @@ export default function PerformanceChart({
       <div className="mt-4 h-[248px] transition-all duration-300">
           {loading ? (
             <div className="flex h-full items-center justify-center rounded-[18px] border border-line bg-white/[0.02] text-sm text-mist">
-              Loading {activeTimeframe} NAV...
+              {t("chart.loadingNav", { timeframe: activeTimeframe })}
             </div>
           ) : error ? (
             <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
@@ -182,7 +184,7 @@ export default function PerformanceChart({
             </div>
           ) : chartSeries.length < 2 ? (
             <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
-              No approximate NAV data is available for the selected timeframe yet.
+              {t("chart.emptyNav")}
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
@@ -201,11 +203,11 @@ export default function PerformanceChart({
                   domain={["dataMin", "dataMax"]}
                   minTickGap={28}
                   tickMargin={8}
-                  tickFormatter={(value) => formatAxisLabel(Number(value), activeTimeframe)}
+                  tickFormatter={(value) => formatAxisLabel(Number(value), activeTimeframe, intlLocale)}
                 />
                 <YAxis
                   width={82}
-                  tickFormatter={(value) => formatCompactCurrency(Number(value), currency)}
+                  tickFormatter={(value) => formatCompactCurrency(Number(value), currency, intlLocale)}
                 />
                 <Tooltip
                   cursor={{
@@ -217,6 +219,9 @@ export default function PerformanceChart({
                       {...props}
                       currency={currency}
                       timeframe={activeTimeframe}
+                      locale={intlLocale}
+                      navLabel={t("chart.nav")}
+                      notAvailableLabel={t("common.notAvailable")}
                     />
                   )}
                 />
@@ -274,41 +279,41 @@ function computePeriodReturn(data: PortfolioHistoryPoint[], days: number) {
   return ((latest.totalValueBase - baseline.totalValueBase) / baseline.totalValueBase) * 100;
 }
 
-function formatAxisLabel(value: number, timeframe: TimeframeKey) {
+function formatAxisLabel(value: number, timeframe: TimeframeKey, locale: string) {
   const date = new Date(value);
 
   if (timeframe === "1D") {
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat(locale, {
       hour: "2-digit",
       minute: "2-digit"
     }).format(date);
   }
 
   if (timeframe === "7D") {
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat(locale, {
       month: "short",
       day: "numeric"
     }).format(date);
   }
 
   if (timeframe === "1Y") {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat(locale, {
       month: "short",
       year: "numeric"
     }).format(date);
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric"
   }).format(date);
 }
 
-function formatTooltipLabel(value: number, timeframe: TimeframeKey) {
+function formatTooltipLabel(value: number, timeframe: TimeframeKey, locale: string) {
   const date = new Date(value);
 
   if (timeframe === "1D") {
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat(locale, {
       month: "short",
       day: "numeric",
       hour: "2-digit",
@@ -317,7 +322,7 @@ function formatTooltipLabel(value: number, timeframe: TimeframeKey) {
   }
 
   if (timeframe === "7D") {
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat(locale, {
       month: "short",
       day: "numeric",
       hour: "2-digit"
@@ -325,13 +330,13 @@ function formatTooltipLabel(value: number, timeframe: TimeframeKey) {
   }
 
   if (timeframe === "1M") {
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat(locale, {
       month: "short",
       day: "numeric",
     }).format(date);
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale, {
     month: "short",
     day: "numeric",
     year: "numeric"
@@ -344,6 +349,9 @@ interface NavTooltipProps {
   payload?: Array<{ value?: unknown }>;
   currency: string;
   timeframe: TimeframeKey;
+  locale: string;
+  navLabel: string;
+  notAvailableLabel: string;
 }
 
 function NavTooltip({
@@ -351,7 +359,10 @@ function NavTooltip({
   label,
   payload,
   currency,
-  timeframe
+  timeframe,
+  locale,
+  navLabel,
+  notAvailableLabel
 }: NavTooltipProps) {
   if (!active || label === undefined || !payload?.length) {
     return null;
@@ -362,9 +373,9 @@ function NavTooltip({
 
   return (
     <div className="rounded-2xl border border-line bg-[#070b11]/95 px-4 py-3 shadow-[0_14px_40px_rgba(0,0,0,0.36)]">
-      <p className="text-xs text-mist">{formatTooltipLabel(label, timeframe)}</p>
+      <p className="text-xs text-mist">{formatTooltipLabel(label, timeframe, locale)}</p>
       <p className="mt-2 mono text-sm text-ink">
-        NAV {Number.isFinite(navValue) ? formatCurrency(navValue, currency) : "N/A"}
+        {navLabel} {Number.isFinite(navValue) ? formatCurrency(navValue, currency, undefined, locale) : notAvailableLabel}
       </p>
     </div>
   );

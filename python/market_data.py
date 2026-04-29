@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import math
+import re
 import sys
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
@@ -227,6 +228,138 @@ def fetch_with_yahoo_http(symbol: str, days_back: int, history_range: str, histo
     }
 
 
+def range_to_coingecko_days(history_range: str, days_back: int) -> str:
+    normalized = (history_range or "").lower()
+    return {
+        "1d": "1",
+        "7d": "7",
+        "1mo": "30",
+        "3mo": "90",
+        "1y": "365",
+    }.get(normalized, str(max(days_back, 7)))
+
+
+def fetch_crypto_total_market_cap(days_back: int, history_range: str, history_interval: str):
+    days = range_to_coingecko_days(history_range, days_back)
+    url = (
+        "https://api.coingecko.com/api/v3/global/market_cap_chart"
+        f"?vs_currency=usd&days={days}"
+    )
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=12) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, ValueError):
+        return None
+
+    market_caps = payload.get("market_caps") or []
+    history = []
+
+    for timestamp_ms, value in market_caps:
+        market_cap = safe_float(value)
+        if market_cap is None:
+            continue
+        history.append(
+            {
+                "date": format_history_timestamp(
+                    datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc),
+                    history_interval,
+                ),
+                "close": market_cap,
+            }
+        )
+
+    if not history:
+        return None
+
+    history = resample_history_points(history, history_interval, map_fetch_interval(history_interval))
+
+    return {
+        "price": history[-1]["close"],
+        "previous_close": history[-2]["close"] if len(history) > 1 else history[-1]["close"],
+        "currency": "USD",
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "provider": "coingecko",
+        "history": history,
+    }
+
+
+def fetch_vnindex_countryeconomy(history_interval: str):
+    url = "https://countryeconomy.com/stock-exchange/vietnam"
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/html",
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=12) as response:
+            html = response.read().decode("utf-8", errors="ignore")
+    except (HTTPError, URLError, TimeoutError, ValueError):
+        return None
+
+    rows = []
+    pattern = re.compile(
+        r"(?P<date>\d{2}/\d{2}/\d{4}|\d{4}/\d{2}/\d{2}|\d{4}-\d{2}-\d{2})"
+        r".{0,240}?"
+        r"(?P<level>\d{1,3}(?:,\d{3})*(?:\.\d+)?)",
+        re.DOTALL,
+    )
+
+    for match in pattern.finditer(html):
+        raw_date = match.group("date")
+        raw_level = match.group("level")
+        level = safe_float(raw_level.replace(",", ""))
+
+        if level is None or level < 100:
+            continue
+
+        parsed_date = None
+        for fmt in ("%m/%d/%Y", "%Y/%m/%d", "%Y-%m-%d"):
+            try:
+                parsed_date = datetime.strptime(raw_date, fmt)
+                break
+            except ValueError:
+                continue
+
+        if parsed_date is None:
+            continue
+
+        rows.append(
+            {
+                "date": format_history_timestamp(parsed_date.replace(tzinfo=timezone.utc), history_interval),
+                "close": level,
+            }
+        )
+
+    deduped = {}
+    for row in rows:
+        deduped[row["date"]] = row
+
+    history = sorted(deduped.values(), key=lambda row: row["date"])
+
+    if not history:
+        return None
+
+    return {
+        "price": history[-1]["close"],
+        "previous_close": history[-2]["close"] if len(history) > 1 else history[-1]["close"],
+        "currency": "VND",
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "provider": "countryeconomy",
+        "history": history,
+    }
+
+
 def fetch_with_vnstock(symbol: str, days_back: int, history_interval: str):
     start_date = (datetime.now() - timedelta(days=max(days_back, 30))).strftime("%Y-%m-%d")
     end_date = datetime.now().strftime("%Y-%m-%d")
@@ -319,12 +452,23 @@ def fetch_quote(asset: dict, days_back: int, history_range: str, history_interva
     errors = []
     warning = None
 
+    if raw_symbol == "CRYPTO_TOTAL_MARKET_CAP":
+        result = fetch_crypto_total_market_cap(days_back, history_range, history_interval)
+        if result is None:
+            errors.append("CoinGecko crypto total market cap unavailable")
+        return build_quote(asset, result, errors), warning
+
     if asset["assetClass"] == "VN_STOCK":
         result = fetch_with_vnstock(raw_symbol, days_back, history_interval)
         if result is None:
             errors.append("vnstock unavailable")
         else:
             warning = result.get("warning")
+
+        if result is None and raw_symbol == "VNINDEX":
+            result = fetch_vnindex_countryeconomy(history_interval)
+            if result is None:
+                errors.append("countryeconomy VNIndex fallback unavailable")
 
     if result is None:
         result = fetch_with_yfinance(yahoo_symbol, days_back, history_range, history_interval)
@@ -336,7 +480,12 @@ def fetch_quote(asset: dict, days_back: int, history_range: str, history_interva
         if result is None:
             errors.append("Yahoo HTTP fallback unavailable")
 
-    quote = {
+    quote = build_quote(asset, result, errors)
+    return quote, warning
+
+
+def build_quote(asset: dict, result, errors):
+    return {
         "asset": asset["asset"],
         "assetClass": asset["assetClass"],
         "currency": result.get("currency") or asset["currency"] if result else asset["currency"],
@@ -349,7 +498,6 @@ def fetch_quote(asset: dict, days_back: int, history_range: str, history_interva
         "history": result.get("history") if result else [],
         "error": None if result else ", ".join(errors),
     }
-    return quote, warning
 
 
 def main():

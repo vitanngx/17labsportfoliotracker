@@ -2,6 +2,7 @@
 
 import React from "react";
 import AllocationDonut from "@/components/Dashboard/AllocationDonut";
+import BenchmarkPerformanceChart from "@/components/Dashboard/BenchmarkPerformanceChart";
 import CashBalancesTable from "@/components/Dashboard/CashBalancesTable";
 import HoldingsTable from "@/components/Dashboard/HoldingsTable";
 import MetricCard from "@/components/Dashboard/MetricCard";
@@ -9,6 +10,8 @@ import PerformanceChart from "@/components/Dashboard/PerformanceChart";
 import SectionCard from "@/components/Dashboard/SectionCard";
 import TransactionForm from "@/components/Dashboard/TransactionForm";
 import TransactionsTable from "@/components/Dashboard/TransactionsTable";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useI18n } from "@/components/I18nProvider";
 import { formatCurrency, formatPercent, formatSignedCurrency } from "@/lib/formatters";
 import { CsvImportRow, PortfolioPayload, Transaction, TransactionInput } from "@/types/portfolio";
 import { useRouter } from "next/navigation";
@@ -23,6 +26,7 @@ export default function PortfolioDashboard({
   initialPayload
 }: PortfolioDashboardProps) {
   const router = useRouter();
+  const { t, intlLocale } = useI18n();
   const [payload, setPayload] = React.useState(initialPayload);
   const [editingTransaction, setEditingTransaction] = React.useState<Transaction | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -48,7 +52,7 @@ export default function PortfolioDashboard({
     try {
       if (!response.ok) {
         if (!options?.silent) {
-          setAdminError("Unable to refresh portfolio data.");
+          setAdminError(t("admin.refreshError"));
         }
         return;
       }
@@ -96,7 +100,7 @@ export default function PortfolioDashboard({
     setBusy(false);
 
     if (!response.ok || !result.ok) {
-      throw new Error(result.error ?? "Unable to save the transaction.");
+      throw new Error(result.error ?? t("admin.saveTransactionError"));
     }
 
     setEditingTransaction(null);
@@ -104,7 +108,7 @@ export default function PortfolioDashboard({
   }
 
   async function handleDeleteTransaction(transaction: Transaction) {
-    if (!window.confirm(`Delete transaction for ${transaction.asset} on ${transaction.date}?`)) {
+    if (!window.confirm(t("admin.deleteConfirm", { asset: transaction.asset, date: transaction.date }))) {
       return;
     }
 
@@ -117,7 +121,7 @@ export default function PortfolioDashboard({
     setBusy(false);
 
     if (!response.ok || !result.ok) {
-      setAdminError(result.error ?? "Unable to delete the transaction.");
+      setAdminError(result.error ?? t("admin.deleteError"));
       return;
     }
 
@@ -147,7 +151,7 @@ export default function PortfolioDashboard({
     setBusy(false);
 
     if (!response.ok || !result.ok) {
-      setAdminError(result.error ?? "Unable to update the base currency.");
+      setAdminError(result.error ?? t("admin.updateBaseCurrencyError"));
       return;
     }
 
@@ -164,7 +168,7 @@ export default function PortfolioDashboard({
     setAdminError(null);
     try {
       const text = await file.text();
-      const rows = parseCsvTransactions(text);
+      const rows = parseCsvTransactions(text, t("form.csvHeaderError"));
       const response = await fetch("/api/admin/transactions", {
         method: "POST",
         headers: {
@@ -174,11 +178,11 @@ export default function PortfolioDashboard({
       });
       const result = (await response.json()) as { ok: boolean; error?: string };
       if (!response.ok || !result.ok) {
-        throw new Error(result.error ?? "CSV import failed.");
+        throw new Error(result.error ?? t("form.csvImportFailed"));
       }
       await refreshPortfolio();
     } catch (error) {
-      setAdminError(error instanceof Error ? error.message : "CSV import failed.");
+      setAdminError(error instanceof Error ? error.message : t("form.csvImportFailed"));
     } finally {
       setBusy(false);
       event.target.value = "";
@@ -187,6 +191,18 @@ export default function PortfolioDashboard({
 
   const { portfolio, transactions, settings, marketWarnings } = payload;
   const systemWarnings = [...portfolio.warnings, ...marketWarnings];
+  const money = React.useCallback(
+    (value: number, currency: string) => formatCurrency(value, currency, undefined, intlLocale),
+    [intlLocale]
+  );
+  const signedMoney = React.useCallback(
+    (value: number, currency: string) => formatSignedCurrency(value, currency, undefined, intlLocale),
+    [intlLocale]
+  );
+  const percent = React.useCallback(
+    (value: number) => formatPercent(value, 2, intlLocale),
+    [intlLocale]
+  );
 
   return (
     <main className="relative overflow-hidden px-4 pb-16 pt-6 md:px-8 xl:px-10">
@@ -195,34 +211,33 @@ export default function PortfolioDashboard({
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-3xl">
               <p className="section-title text-accent">
-                {isAdminMode ? "Admin Dashboard" : "Public Dashboard"}
+                {isAdminMode ? t("common.adminDashboard") : t("common.publicDashboard")}
               </p>
               <h1 className="headline mt-3 text-4xl md:text-5xl">
-                My Portfolio Tracker
+                {t("common.appName")}
               </h1>
               <p className="mt-4 max-w-3xl text-sm leading-6 text-mist md:text-base">
-                {isAdminMode
-                  ? "I built this application to track my personal investment portfolio, monitor transactions, analyze allocation, and review portfolio performance over time."
-                  : "I built this application to track my personal investment portfolio, monitor transactions, analyze allocation, and review portfolio performance over time."}
+                {t("common.appDescription")}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
+              <LanguageSwitcher />
               <div className="rounded-full border border-line px-4 py-3 text-sm text-mist">
-                Base currency: <span className="text-ink">{settings.baseCurrency}</span>
+                {t("common.baseCurrency")}: <span className="text-ink">{settings.baseCurrency}</span>
               </div>
               <div className="rounded-full border border-line px-4 py-3 text-sm text-mist">
-                Auto refresh: <span className="text-ink">60s</span> • Last update{" "}
+                {t("common.autoRefresh")}: <span className="text-ink">60s</span> • {t("common.lastUpdate")}{" "}
                 <span className="text-ink">
-                  {lastUpdatedAt ? formatTimeLabel(lastUpdatedAt) : "--:--:--"}
+                  {lastUpdatedAt ? formatTimeLabel(lastUpdatedAt, intlLocale) : "--:--:--"}
                 </span>
               </div>
               {isAdminMode ? (
                 <button className="secondary-button" type="button" onClick={handleLogout}>
-                  Logout
+                  {t("common.logout")}
                 </button>
               ) : (
                 <a className="secondary-button" href="/admin">
-                  Admin Login
+                  {t("common.adminLogin")}
                 </a>
               )}
             </div>
@@ -231,11 +246,11 @@ export default function PortfolioDashboard({
 
         {systemWarnings.length > 0 || adminError ? (
           <section className="surface-panel-soft rounded-[24px] p-5">
-            <p className="section-title text-gold">System Notes</p>
+            <p className="section-title text-gold">{t("common.systemNotes")}</p>
             <div className="mt-3 space-y-2 text-sm text-mist">
               {adminError ? <p className="text-negative">{adminError}</p> : null}
               {systemWarnings.map((warning) => (
-                <p key={warning}>{warning}</p>
+                <p key={warning}>{localizeSystemWarning(warning, t)}</p>
               ))}
             </div>
           </section>
@@ -243,47 +258,54 @@ export default function PortfolioDashboard({
 
         <section className="grid gap-4 xl:grid-cols-5">
           <MetricCard
-            label="Net Portfolio Value"
-            value={formatCurrency(portfolio.summary.totalPortfolioValueBase, settings.baseCurrency)}
-            detail={`Gross exposure ${formatCurrency(portfolio.summary.grossExposureBase, settings.baseCurrency)} • Cash ${formatCurrency(portfolio.summary.totalCashValueBase, settings.baseCurrency)}`}
+            label={t("metrics.netPortfolioValue")}
+            value={money(portfolio.summary.totalPortfolioValueBase, settings.baseCurrency)}
+            detail={t("metrics.grossExposureDetail", {
+              value: money(portfolio.summary.grossExposureBase, settings.baseCurrency),
+              cash: money(portfolio.summary.totalCashValueBase, settings.baseCurrency)
+            })}
           />
           <MetricCard
-            label="Gross Exposure"
-            value={formatCurrency(portfolio.summary.grossExposureBase, settings.baseCurrency)}
-            detail="Total holdings market value before cash surplus or deficit is applied."
+            label={t("metrics.grossExposure")}
+            value={money(portfolio.summary.grossExposureBase, settings.baseCurrency)}
+            detail={t("metrics.grossExposureDescription")}
           />
           <MetricCard
-            label="Total Return"
-            value={formatPercent(portfolio.summary.totalReturnPct)}
-            detail={`Max drawdown ${
-              portfolio.summary.maxDrawdownPct === null
-                ? "N/A"
-                : formatPercent(portfolio.summary.maxDrawdownPct)
-            }`}
+            label={t("metrics.totalReturn")}
+            value={percent(portfolio.summary.totalReturnPct)}
+            detail={t("metrics.maxDrawdown", {
+              value:
+                portfolio.summary.maxDrawdownPct === null
+                  ? t("common.notAvailable")
+                  : percent(portfolio.summary.maxDrawdownPct)
+            })}
             tone={portfolio.summary.totalReturnPct >= 0 ? "positive" : "negative"}
           />
           <MetricCard
-            label="Unrealized PnL"
-            value={formatSignedCurrency(
+            label={t("metrics.unrealizedPnl")}
+            value={signedMoney(
               portfolio.summary.totalUnrealizedPnlBase,
               settings.baseCurrency
             )}
-            detail={`Realized ${formatSignedCurrency(portfolio.summary.totalRealizedPnlBase, settings.baseCurrency)} • Dividends ${formatSignedCurrency(portfolio.summary.totalDividendIncomeBase, settings.baseCurrency)}`}
+            detail={t("metrics.realizedDividends", {
+              realized: signedMoney(portfolio.summary.totalRealizedPnlBase, settings.baseCurrency),
+              dividends: signedMoney(portfolio.summary.totalDividendIncomeBase, settings.baseCurrency)
+            })}
             tone={
               portfolio.summary.totalUnrealizedPnlBase >= 0 ? "positive" : "negative"
             }
           />
           <MetricCard
-            label="Risk Snapshot"
+            label={t("metrics.riskSnapshot")}
             value={
               portfolio.summary.sharpeRatio === null
-                ? "N/A"
+                ? t("common.notAvailable")
                 : portfolio.summary.sharpeRatio.toFixed(2)
             }
             detail={
               portfolio.summary.volatility === null
-                ? "Need more history"
-                : `Annualized volatility ${portfolio.summary.volatility.toFixed(2)}%`
+                ? t("metrics.needMoreHistory")
+                : t("metrics.annualizedVolatility", { value: portfolio.summary.volatility.toFixed(2) })
             }
           />
         </section>
@@ -297,7 +319,7 @@ export default function PortfolioDashboard({
           </div>
           <div className="xl:col-span-5">
             <AllocationDonut
-              title="Allocation by Asset"
+              title={t("sections.allocationByAsset")}
               data={portfolio.summary.allocationByAsset}
               currency={settings.baseCurrency}
               className="h-full"
@@ -310,7 +332,7 @@ export default function PortfolioDashboard({
         <section className="grid gap-6 xl:grid-cols-12 xl:items-stretch">
           <div className="xl:col-span-6">
             <AllocationDonut
-              title="Allocation by Asset Class"
+              title={t("sections.allocationByAssetClass")}
               data={portfolio.summary.allocationByClass}
               currency={settings.baseCurrency}
               className="h-full"
@@ -322,6 +344,8 @@ export default function PortfolioDashboard({
           </div>
         </section>
 
+        <BenchmarkPerformanceChart />
+
         <section>
           <HoldingsTable holdings={portfolio.holdings} />
         </section>
@@ -329,7 +353,7 @@ export default function PortfolioDashboard({
         {isAdminMode ? (
           <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
             <SectionCard
-              title={editingTransaction ? "Edit Transaction" : "Add Transaction"}
+              title={editingTransaction ? t("sections.editTransaction") : t("sections.addTransaction")}
             >
               <TransactionForm
                 onSubmit={handleTransactionSubmit}
@@ -338,11 +362,11 @@ export default function PortfolioDashboard({
               />
             </SectionCard>
             <SectionCard
-              title="Admin Controls"
+              title={t("sections.adminControls")}
             >
               <div className="space-y-5">
                 <label className="block">
-                  <span className="field-label mb-2 block">Base Currency</span>
+                  <span className="field-label mb-2 block">{t("form.baseCurrency")}</span>
                   <select
                     className="field-input"
                     value={settings.baseCurrency}
@@ -357,7 +381,7 @@ export default function PortfolioDashboard({
                   </select>
                 </label>
                 <label className="block">
-                  <span className="field-label mb-2 block">Import CSV</span>
+                  <span className="field-label mb-2 block">{t("form.importCsv")}</span>
                   <input
                     className="field-input"
                     type="file"
@@ -382,14 +406,14 @@ export default function PortfolioDashboard({
   );
 }
 
-function parseCsvTransactions(rawCsv: string): CsvImportRow[] {
+function parseCsvTransactions(rawCsv: string, emptyMessage: string): CsvImportRow[] {
   const lines = rawCsv
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
   if (lines.length < 2) {
-    throw new Error("CSV import needs a header row and at least one data row.");
+    throw new Error(emptyMessage);
   }
 
   const headers = lines[0].split(",").map((header) => header.trim());
@@ -413,10 +437,22 @@ function parseCsvTransactions(rawCsv: string): CsvImportRow[] {
   return rows;
 }
 
-function formatTimeLabel(value: Date) {
-  return new Intl.DateTimeFormat("en-GB", {
+function formatTimeLabel(value: Date, locale: string) {
+  return new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
   }).format(value);
+}
+
+function localizeSystemWarning(
+  warning: string,
+  t: (key: string) => string
+) {
+  if (warning.toLowerCase().includes("cash deficit detected")) {
+    const currency = warning.split(":")[0]?.trim();
+    return currency ? `${currency}: ${t("cash.deficitWarning")}` : t("cash.deficitWarning");
+  }
+
+  return warning;
 }

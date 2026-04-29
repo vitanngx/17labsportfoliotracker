@@ -144,6 +144,38 @@ export interface HistoricalNavResponse {
   error?: string;
 }
 
+export type BenchmarkKey =
+  | "portfolio"
+  | "vnIndex"
+  | "sp500"
+  | "cac40"
+  | "cryptoMarketCap";
+
+export interface BenchmarkSeriesInfo {
+  key: BenchmarkKey;
+  label: string;
+  color: string;
+  available: boolean;
+}
+
+export interface BenchmarkPerformancePoint {
+  date: string;
+  portfolio?: number | null;
+  vnIndex?: number | null;
+  sp500?: number | null;
+  cac40?: number | null;
+  cryptoMarketCap?: number | null;
+}
+
+export interface BenchmarkPerformanceResponse {
+  ok: boolean;
+  timeframe: TimeframeKey;
+  history: BenchmarkPerformancePoint[];
+  series: BenchmarkSeriesInfo[];
+  warnings: string[];
+  error?: string;
+}
+
 export interface PortfolioSummary {
   baseCurrency: string;
   totalPortfolioValueBase: number;

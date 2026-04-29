@@ -1,8 +1,11 @@
+"use client";
+
 import { formatCurrency, formatDateLabel, formatNumber } from "@/lib/formatters";
 import { getAssetDisplayName } from "@/lib/assetNames";
 import { transactionCashAmount } from "@/lib/transactions";
 import { Transaction } from "@/types/portfolio";
 import SectionCard from "@/components/Dashboard/SectionCard";
+import { useI18n } from "@/components/I18nProvider";
 
 interface TransactionsTableProps {
   transactions: Transaction[];
@@ -17,6 +20,7 @@ export default function TransactionsTable({
   onEdit,
   onDelete
 }: TransactionsTableProps) {
+  const { t, intlLocale } = useI18n();
   const sorted = [...transactions].sort((left, right) => {
     if (left.date !== right.date) {
       return right.date.localeCompare(left.date);
@@ -25,19 +29,19 @@ export default function TransactionsTable({
   });
 
   return (
-    <SectionCard title="Transaction History">
+    <SectionCard title={t("sections.transactionHistory")}>
       <div className="overflow-x-auto">
         <table className="data-table min-w-full">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Asset</th>
-              <th>Type</th>
-              <th>Quantity</th>
-              <th>Price</th>
-              <th>Fees</th>
-              <th>Cash Impact</th>
-              {editable ? <th>Actions</th> : null}
+              <th>{t("tables.date")}</th>
+              <th>{t("tables.asset")}</th>
+              <th>{t("tables.type")}</th>
+              <th>{t("tables.quantity")}</th>
+              <th>{t("tables.price")}</th>
+              <th>{t("tables.fees")}</th>
+              <th>{t("tables.cashImpact")}</th>
+              {editable ? <th>{t("common.actions")}</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -47,13 +51,13 @@ export default function TransactionsTable({
                   colSpan={editable ? 8 : 7}
                   className="py-10 text-center text-sm text-mist"
                 >
-                  No transactions recorded yet.
+                  {t("tables.emptyTransactions")}
                 </td>
               </tr>
             ) : (
               sorted.map((transaction) => (
                 <tr key={transaction.id}>
-                  <td className="text-sm text-ink">{formatDateLabel(transaction.date)}</td>
+                  <td className="text-sm text-ink">{formatDateLabel(transaction.date, intlLocale)}</td>
                   <td>
                     <p className="font-medium text-ink">{transaction.asset}</p>
                     <p className="text-xs text-mist">{getAssetDisplayName(transaction.asset)}</p>
@@ -64,16 +68,16 @@ export default function TransactionsTable({
                     </span>
                   </td>
                   <td className="mono text-sm text-ink">
-                    {formatNumber(transaction.quantity, { maximumFractionDigits: 6 })}
+                    {formatNumber(transaction.quantity, { maximumFractionDigits: 6 }, intlLocale)}
                   </td>
                   <td className="mono text-sm text-ink">
-                    {formatCurrency(transaction.price, transaction.currency)}
+                    {formatCurrency(transaction.price, transaction.currency, undefined, intlLocale)}
                   </td>
                   <td className="mono text-sm text-ink">
-                    {formatCurrency(transaction.fees, transaction.currency)}
+                    {formatCurrency(transaction.fees, transaction.currency, undefined, intlLocale)}
                   </td>
                   <td className="mono text-sm text-ink">
-                    {formatCurrency(transactionCashAmount(transaction), transaction.currency)}
+                    {formatCurrency(transactionCashAmount(transaction), transaction.currency, undefined, intlLocale)}
                   </td>
                   {editable ? (
                     <td>
@@ -83,14 +87,14 @@ export default function TransactionsTable({
                           type="button"
                           onClick={() => onEdit?.(transaction)}
                         >
-                          Edit
+                          {t("common.edit")}
                         </button>
                         <button
                           className="secondary-button px-3 py-2 text-xs text-negative"
                           type="button"
                           onClick={() => onDelete?.(transaction)}
                         >
-                          Delete
+                          {t("common.delete")}
                         </button>
                       </div>
                     </td>

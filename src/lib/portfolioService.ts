@@ -12,6 +12,10 @@ import {
 import { getTimeframeWindow, TIMEFRAME_CONFIG } from "@/lib/marketData/timeframes";
 import { buildAssetKey, dedupeMarketAssets } from "@/lib/marketData/symbols";
 import {
+  BenchmarkKey,
+  BenchmarkPerformancePoint,
+  BenchmarkPerformanceResponse,
+  BenchmarkSeriesInfo,
   CashBalance,
   HistoricalNavResponse,
   Holding,
@@ -19,6 +23,48 @@ import {
   PortfolioPayload,
   TimeframeKey
 } from "@/types/portfolio";
+
+const BENCHMARKS: Array<{
+  key: Exclude<BenchmarkKey, "portfolio">;
+  label: string;
+  symbol: string;
+  assetClass: "VN_STOCK" | "OTHER";
+  currency: string;
+  color: string;
+}> = [
+  {
+    key: "vnIndex",
+    label: "VNIndex",
+    symbol: "VNINDEX",
+    assetClass: "VN_STOCK",
+    currency: "VND",
+    color: "#F7C873"
+  },
+  {
+    key: "sp500",
+    label: "S&P 500",
+    symbol: "^GSPC",
+    assetClass: "OTHER",
+    currency: "USD",
+    color: "#7BC7FF"
+  },
+  {
+    key: "cac40",
+    label: "CAC 40",
+    symbol: "^FCHI",
+    assetClass: "OTHER",
+    currency: "EUR",
+    color: "#66D6A4"
+  },
+  {
+    key: "cryptoMarketCap",
+    label: "Crypto Total Market Cap",
+    symbol: "CRYPTO_TOTAL_MARKET_CAP",
+    assetClass: "OTHER",
+    currency: "USD",
+    color: "#FF9B73"
+  }
+];
 
 export async function buildPortfolioPayload(isAdmin: boolean): Promise<PortfolioPayload> {
   const transactions = listTransactions();
@@ -117,6 +163,69 @@ export async function buildHistoricalNavPayload(
   setHistoricalNavCache(cacheKey, payload);
 
   return payload;
+}
+
+export async function buildBenchmarkPerformancePayload(
+  timeframe: TimeframeKey
+): Promise<BenchmarkPerformanceResponse> {
+  const navPayload = await buildHistoricalNavPayload(timeframe);
+  const config = TIMEFRAME_CONFIG[timeframe];
+  const benchmarkAssets = BENCHMARKS.map((benchmark) => ({
+    asset: benchmark.symbol,
+    assetClass: benchmark.assetClass,
+    currency: benchmark.currency
+  }));
+  const benchmarkBundle = await fetchHistoricalMarketBundle(
+    benchmarkAssets,
+    "USD",
+    config
+  );
+  const benchmarkSeries = Object.fromEntries(
+    BENCHMARKS.map((benchmark) => {
+      const quote = benchmarkBundle.quotes[buildAssetKey(benchmark.symbol, benchmark.assetClass)];
+      return [
+        benchmark.key,
+        normalizeReturnSeries(trimBenchmarkHistory(quote?.history ?? [], timeframe))
+      ];
+    })
+  ) as Record<Exclude<BenchmarkKey, "portfolio">, Array<{ date: string; value: number }>>;
+  const portfolioSeries = normalizeReturnSeries(
+    navPayload.history.map((point) => ({
+      date: point.date,
+      close: point.totalValueBase
+    }))
+  );
+  const history = mergeBenchmarkSeries({
+    portfolio: portfolioSeries,
+    ...benchmarkSeries
+  });
+  const series: BenchmarkSeriesInfo[] = [
+    {
+      key: "portfolio",
+      label: "Portfolio",
+      color: "#EDF2F7",
+      available: portfolioSeries.length > 1
+    },
+    ...BENCHMARKS.map((benchmark) => ({
+      key: benchmark.key,
+      label: benchmark.label,
+      color: benchmark.color,
+      available: benchmarkSeries[benchmark.key].length > 1
+    }))
+  ];
+  const missingWarnings = BENCHMARKS.flatMap((benchmark) =>
+    benchmarkSeries[benchmark.key].length > 1
+      ? []
+      : [`${benchmark.label}: benchmark history unavailable for ${timeframe}.`]
+  );
+
+  return {
+    ok: true,
+    timeframe,
+    history,
+    series,
+    warnings: [...benchmarkBundle.warnings, ...missingWarnings]
+  };
 }
 
 function buildApproximateHistoricalNav(
@@ -249,6 +358,67 @@ function trimHistoryToTimeframe(
   return history.filter((point) => {
     const timestamp = new Date(point.date).getTime();
     return timestamp >= start.getTime() && timestamp <= end.getTime();
+  });
+}
+
+function trimBenchmarkHistory(
+  history: { date: string; close: number }[],
+  timeframe: TimeframeKey
+) {
+  const { start, end } = getTimeframeWindow(timeframe);
+
+  return history.filter((point) => {
+    const timestamp = new Date(point.date).getTime();
+    return timestamp >= start.getTime() && timestamp <= end.getTime();
+  });
+}
+
+function normalizeReturnSeries(history: { date: string; close: number }[]) {
+  const validHistory = history.filter((point) => Number.isFinite(point.close) && point.close > 0);
+  const baseline = validHistory[0]?.close;
+
+  if (!baseline) {
+    return [];
+  }
+
+  return validHistory.map((point) => ({
+    date: point.date,
+    value: ((point.close - baseline) / baseline) * 100
+  }));
+}
+
+function mergeBenchmarkSeries(
+  series: Record<BenchmarkKey, Array<{ date: string; value: number }>>
+): BenchmarkPerformancePoint[] {
+  const timestamps = Array.from(
+    new Set(Object.values(series).flatMap((points) => points.map((point) => point.date)))
+  ).sort((left, right) => new Date(left).getTime() - new Date(right).getTime());
+
+  const cursors = Object.fromEntries(
+    Object.keys(series).map((key) => [key, 0])
+  ) as Record<BenchmarkKey, number>;
+  const latestValues = {} as Record<BenchmarkKey, number | null>;
+
+  return timestamps.map((timestamp) => {
+    const point: BenchmarkPerformancePoint = { date: timestamp };
+
+    (Object.keys(series) as BenchmarkKey[]).forEach((key) => {
+      const points = series[key];
+      let cursor = cursors[key] ?? 0;
+
+      while (
+        cursor < points.length &&
+        new Date(points[cursor].date).getTime() <= new Date(timestamp).getTime()
+      ) {
+        latestValues[key] = points[cursor].value;
+        cursor += 1;
+      }
+
+      cursors[key] = cursor;
+      point[key] = latestValues[key] ?? null;
+    });
+
+    return point;
   });
 }
 

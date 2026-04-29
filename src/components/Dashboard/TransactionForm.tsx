@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useI18n } from "@/components/I18nProvider";
 import { ASSET_CLASS_OPTIONS } from "@/lib/portfolioConfig";
 import { AssetClass, Transaction, TransactionInput, TransactionType } from "@/types/portfolio";
 
@@ -35,6 +36,7 @@ export default function TransactionForm({
   editingTransaction,
   onCancelEdit
 }: TransactionFormProps) {
+  const { t } = useI18n();
   const [draft, setDraft] = React.useState<DraftState>(createDraft());
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -92,25 +94,25 @@ export default function TransactionForm({
 
     if (!draft.date || !draft.asset.trim() || !draft.currency.trim()) {
       setSaving(false);
-      setError("Date, asset, and currency are required.");
+      setError(t("form.requiredError"));
       return;
     }
 
     if (!Number.isFinite(quantity) || quantity < 0) {
       setSaving(false);
-      setError("Quantity must be zero or greater.");
+      setError(t("form.quantityError"));
       return;
     }
 
     if (!Number.isFinite(price) || price < 0) {
       setSaving(false);
-      setError("Price must be zero or greater.");
+      setError(t("form.priceError"));
       return;
     }
 
     if (!Number.isFinite(fees) || fees < 0) {
       setSaving(false);
-      setError("Fees must be zero or greater.");
+      setError(t("form.feesError"));
       return;
     }
 
@@ -131,7 +133,7 @@ export default function TransactionForm({
       );
       setDraft(createDraft());
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to save.");
+      setError(submitError instanceof Error ? submitError.message : t("form.saveError"));
     } finally {
       setSaving(false);
     }
@@ -140,22 +142,22 @@ export default function TransactionForm({
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="Date">
+        <Field label={t("form.date")}>
           <input className="field-input" type="date" value={draft.date} onChange={(event) => updateField("date", event.target.value)} />
         </Field>
-        <Field label="Asset">
+        <Field label={t("form.asset")}>
           <input className="field-input mono" type="text" value={draft.asset} onChange={(event) => updateField("asset", event.target.value)} />
         </Field>
-        <Field label="Asset Class">
+        <Field label={t("form.assetClass")}>
           <select className="field-input" value={draft.assetClass} onChange={(event) => handleAssetClassChange(event.target.value as AssetClass)}>
             {ASSET_CLASS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
-                {option.label}
+                {t(`assetClasses.${option.value}`)}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Type">
+        <Field label={t("form.type")}>
           <select className="field-input" value={draft.type} onChange={(event) => updateField("type", event.target.value as TransactionType)}>
             {TRANSACTION_TYPE_OPTIONS.map((type) => (
               <option key={type} value={type}>
@@ -164,34 +166,34 @@ export default function TransactionForm({
             ))}
           </select>
         </Field>
-        <Field label="Quantity">
+        <Field label={t("form.quantity")}>
           <input className="field-input mono" type="number" step="0.000001" value={draft.quantity} onChange={(event) => updateField("quantity", event.target.value)} />
         </Field>
-        <Field label="Price">
+        <Field label={t("form.price")}>
           <input className="field-input mono" type="number" step="0.0001" value={draft.price} onChange={(event) => updateField("price", event.target.value)} />
         </Field>
-        <Field label="Fees">
+        <Field label={t("form.fees")}>
           <input className="field-input mono" type="number" step="0.0001" value={draft.fees} onChange={(event) => updateField("fees", event.target.value)} />
         </Field>
-        <Field label="Currency">
+        <Field label={t("form.currency")}>
           <input className="field-input mono" type="text" value={draft.currency} onChange={(event) => updateField("currency", event.target.value)} />
         </Field>
       </div>
-      <Field label="Note">
+      <Field label={t("form.note")}>
         <input className="field-input" type="text" value={draft.note} onChange={(event) => updateField("note", event.target.value)} />
       </Field>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-mist">
-          Admin mutations write to SQLite and never appear on the public dashboard as controls.
+          {t("form.adminMutationNote")}
         </p>
         <div className="flex gap-2">
           {editingTransaction ? (
             <button className="secondary-button" type="button" onClick={onCancelEdit}>
-              Cancel edit
+              {t("common.cancelEdit")}
             </button>
           ) : null}
           <button className="primary-button" disabled={saving} type="submit">
-            {saving ? "Saving..." : editingTransaction ? "Update transaction" : "Add transaction"}
+            {saving ? t("form.saving") : editingTransaction ? t("form.updateTransaction") : t("form.addTransaction")}
           </button>
         </div>
       </div>
