@@ -52,9 +52,13 @@
   },
   "benchmarks": {
     "title": "Performance relative",
-    "subtitle": "Rendement du portefeuille comparé aux grands benchmarks, normalisé sur le même point de départ.",
+    "subtitle": "Portefeuille vs {benchmark}, normalisé sur le même point de départ.",
+    "compareWith": "Comparer avec",
+    "portfolio": "Portefeuille",
+    "benchmark": "Benchmark",
+    "difference": "Écart",
     "loading": "Chargement des benchmarks {timeframe}...",
-    "empty": "Les données de performance des benchmarks ne sont pas encore disponibles pour cette période.",
+    "empty": "Les données de performance de {benchmark} ne sont pas encore disponibles pour cette période.",
     "loadError": "Impossible de charger la performance des benchmarks."
   },
   "cash": {

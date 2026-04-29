@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import math
+import os
 import re
 import sys
 from contextlib import redirect_stdout
@@ -8,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 from typing import Optional
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
@@ -164,7 +166,13 @@ def fetch_with_yfinance(symbol: str, days_back: int, history_range: str, history
         return None
 
 
-def fetch_with_yahoo_http(symbol: str, days_back: int, history_range: str, history_interval: str):
+def fetch_with_yahoo_http(
+    symbol: str,
+    days_back: int,
+    history_range: str,
+    history_interval: str,
+    timeout_seconds: int = 12,
+):
     fetch_interval = map_fetch_interval(history_interval)
     url = (
         f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -179,7 +187,7 @@ def fetch_with_yahoo_http(symbol: str, days_back: int, history_range: str, histo
     )
 
     try:
-        with urlopen(request, timeout=12) as response:
+        with urlopen(request, timeout=timeout_seconds) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, ValueError):
         return None
@@ -239,7 +247,113 @@ def range_to_coingecko_days(history_range: str, days_back: int) -> str:
     }.get(normalized, str(max(days_back, 7)))
 
 
+def history_range_start(history_range: str, days_back: int) -> datetime:
+    now = datetime.now(timezone.utc)
+    normalized = (history_range or "").lower()
+
+    if normalized == "1d":
+        return now - timedelta(days=1)
+    if normalized == "7d":
+        return now - timedelta(days=7)
+    if normalized == "1mo":
+        return now - timedelta(days=30)
+    if normalized == "3mo":
+        return now - timedelta(days=90)
+    if normalized == "1y":
+        return now - timedelta(days=365)
+
+    return now - timedelta(days=max(days_back, 7))
+
+
+def map_cmc_interval(history_interval: str) -> str:
+    return {
+        "15m": "15m",
+        "1h": "1h",
+        "4h": "4h",
+        "1d": "1d",
+        "3d": "3d",
+    }.get(history_interval, "1d")
+
+
+def fetch_crypto_total_market_cap_cmc(
+    days_back: int, history_range: str, history_interval: str
+):
+    api_key = os.environ.get("CMC_API_KEY", "").strip()
+
+    if not api_key:
+        return None
+
+    now = datetime.now(timezone.utc)
+    params = {
+        "time_start": history_range_start(history_range, days_back).isoformat(),
+        "time_end": now.isoformat(),
+        "interval": map_cmc_interval(history_interval),
+        "convert": "USD",
+        "aux": "btc_dominance,eth_dominance,total_volume_24h",
+    }
+    url = (
+        "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/historical"
+        f"?{urlencode(params)}"
+    )
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json",
+            "X-CMC_PRO_API_KEY": api_key,
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, ValueError):
+        return None
+
+    quotes = ((payload.get("data") or {}).get("quotes") or [])
+    history = []
+
+    for quote in quotes:
+        usd_quote = ((quote.get("quote") or {}).get("USD") or {})
+        market_cap = safe_float(usd_quote.get("total_market_cap"))
+        timestamp = quote.get("timestamp") or usd_quote.get("timestamp")
+
+        if market_cap is None or timestamp is None:
+            continue
+
+        try:
+            parsed_timestamp = datetime.fromisoformat(str(timestamp).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+
+        history.append(
+            {
+                "date": format_history_timestamp(parsed_timestamp, history_interval),
+                "close": market_cap,
+            }
+        )
+
+    if not history:
+        return None
+
+    history = sorted(history, key=lambda point: point["date"])
+
+    return {
+        "price": history[-1]["close"],
+        "previous_close": history[-2]["close"] if len(history) > 1 else history[-1]["close"],
+        "currency": "USD",
+        "as_of": now.isoformat(),
+        "provider": "coinmarketcap",
+        "history": history,
+    }
+
+
 def fetch_crypto_total_market_cap(days_back: int, history_range: str, history_interval: str):
+    cmc_result = fetch_crypto_total_market_cap_cmc(days_back, history_range, history_interval)
+
+    if cmc_result is not None:
+        return cmc_result
+
     days = range_to_coingecko_days(history_range, days_back)
     url = (
         "https://api.coingecko.com/api/v3/global/market_cap_chart"
@@ -254,7 +368,7 @@ def fetch_crypto_total_market_cap(days_back: int, history_range: str, history_in
     )
 
     try:
-        with urlopen(request, timeout=12) as response:
+        with urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, ValueError):
         return None
@@ -302,7 +416,7 @@ def fetch_vnindex_countryeconomy(history_interval: str):
     )
 
     try:
-        with urlopen(request, timeout=12) as response:
+        with urlopen(request, timeout=5) as response:
             html = response.read().decode("utf-8", errors="ignore")
     except (HTTPError, URLError, TimeoutError, ValueError):
         return None
@@ -476,7 +590,14 @@ def fetch_quote(asset: dict, days_back: int, history_range: str, history_interva
             errors.append("yfinance unavailable")
 
     if result is None:
-        result = fetch_with_yahoo_http(yahoo_symbol, days_back, history_range, history_interval)
+        fallback_timeout = 5 if raw_symbol in {"VNINDEX", "CRYPTO_TOTAL_MARKET_CAP"} else 12
+        result = fetch_with_yahoo_http(
+            yahoo_symbol,
+            days_back,
+            history_range,
+            history_interval,
+            fallback_timeout,
+        )
         if result is None:
             errors.append("Yahoo HTTP fallback unavailable")
 

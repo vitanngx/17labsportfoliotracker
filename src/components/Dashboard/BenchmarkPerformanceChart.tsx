@@ -3,7 +3,6 @@
 import React from "react";
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -23,10 +22,13 @@ import {
 } from "@/types/portfolio";
 
 const TIMEFRAMES = Object.keys(TIMEFRAME_CONFIG) as TimeframeKey[];
+const DEFAULT_BENCHMARK: Exclude<BenchmarkKey, "portfolio"> = "sp500";
 
 export default function BenchmarkPerformanceChart() {
   const { t, intlLocale } = useI18n();
   const [activeTimeframe, setActiveTimeframe] = React.useState<TimeframeKey>("7D");
+  const [selectedBenchmark, setSelectedBenchmark] =
+    React.useState<Exclude<BenchmarkKey, "portfolio">>(DEFAULT_BENCHMARK);
   const [chartData, setChartData] = React.useState<BenchmarkPerformancePoint[]>([]);
   const [series, setSeries] = React.useState<BenchmarkSeriesInfo[]>([]);
   const [warnings, setWarnings] = React.useState<string[]>([]);
@@ -36,12 +38,22 @@ export default function BenchmarkPerformanceChart() {
   const chartSeries = React.useMemo(
     () =>
       chartData.map((point) => ({
-        ...point,
+        portfolio: point.portfolio,
+        [selectedBenchmark]: point[selectedBenchmark],
         timestamp: new Date(point.date).getTime()
       })),
-    [chartData]
+    [chartData, selectedBenchmark]
   );
-  const visibleSeries = series.filter((item) => item.available);
+  const portfolioSeries = series.find((item) => item.key === "portfolio");
+  const selectedBenchmarkSeries = series.find((item) => item.key === selectedBenchmark);
+  const benchmarkOptions = series.filter((item) => item.key !== "portfolio");
+  const visibleSeries = [portfolioSeries, selectedBenchmarkSeries].filter(
+    (item): item is BenchmarkSeriesInfo => Boolean(item?.available)
+  );
+  const comparisonStats = React.useMemo(
+    () => computeComparisonStats(chartData, selectedBenchmark),
+    [chartData, selectedBenchmark]
+  );
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -94,28 +106,70 @@ export default function BenchmarkPerformanceChart() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="section-title text-mist">{t("benchmarks.title")}</p>
-          <p className="mt-2 text-sm text-mist">{t("benchmarks.subtitle")}</p>
+          <p className="mt-2 text-sm text-mist">
+            {t("benchmarks.subtitle", {
+              benchmark: selectedBenchmarkSeries?.label ?? "S&P 500"
+            })}
+          </p>
         </div>
-        <div className="flex rounded-full border border-line bg-black/20 p-1">
-          {TIMEFRAMES.map((timeframe) => {
-            const isActive = timeframe === activeTimeframe;
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <label className="flex items-center gap-2 rounded-full border border-line bg-black/20 px-3 py-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mist">
+              {t("benchmarks.compareWith")}
+            </span>
+            <select
+              className="bg-transparent text-sm font-semibold text-ink outline-none"
+              value={selectedBenchmark}
+              onChange={(event) =>
+                setSelectedBenchmark(event.target.value as Exclude<BenchmarkKey, "portfolio">)
+              }
+            >
+              {benchmarkOptions.map((item) => (
+                <option key={item.key} value={item.key} className="bg-[#070b11] text-ink">
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex rounded-full border border-line bg-black/20 p-1">
+            {TIMEFRAMES.map((timeframe) => {
+              const isActive = timeframe === activeTimeframe;
 
-            return (
-              <button
-                key={timeframe}
-                type="button"
-                onClick={() => setActiveTimeframe(timeframe)}
-                className={`h-8 min-w-12 rounded-full px-3 text-xs font-semibold transition-all ${
-                  isActive
-                    ? "bg-ink text-[#080d14] shadow-[0_8px_22px_rgba(237,242,247,0.16)]"
-                    : "text-mist hover:bg-white/[0.05] hover:text-ink"
-                }`}
-              >
-                {timeframe}
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={timeframe}
+                  type="button"
+                  onClick={() => setActiveTimeframe(timeframe)}
+                  className={`h-8 min-w-12 rounded-full px-3 text-xs font-semibold transition-all ${
+                    isActive
+                      ? "bg-ink text-[#080d14] shadow-[0_8px_22px_rgba(237,242,247,0.16)]"
+                      : "text-mist hover:bg-white/[0.05] hover:text-ink"
+                  }`}
+                >
+                  {timeframe}
+                </button>
+              );
+            })}
+          </div>
         </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        <PerformancePill
+          label={t("benchmarks.portfolio")}
+          value={comparisonStats.portfolio}
+          locale={intlLocale}
+        />
+        <PerformancePill
+          label={selectedBenchmarkSeries?.label ?? t("benchmarks.benchmark")}
+          value={comparisonStats.benchmark}
+          locale={intlLocale}
+        />
+        <PerformancePill
+          label={t("benchmarks.difference")}
+          value={comparisonStats.difference}
+          locale={intlLocale}
+        />
       </div>
 
       {warnings.length > 0 ? (
@@ -131,9 +185,11 @@ export default function BenchmarkPerformanceChart() {
           <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
             {error}
           </div>
-        ) : chartSeries.length < 2 || visibleSeries.length < 2 ? (
+        ) : chartSeries.length < 2 || !portfolioSeries?.available || !selectedBenchmarkSeries?.available ? (
           <div className="flex h-full items-center justify-center rounded-[18px] border border-dashed border-line bg-white/[0.02] px-6 text-center text-sm text-mist">
-            {t("benchmarks.empty")}
+            {t("benchmarks.empty", {
+              benchmark: selectedBenchmarkSeries?.label ?? t("benchmarks.benchmark")
+            })}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -166,12 +222,6 @@ export default function BenchmarkPerformanceChart() {
                   />
                 )}
               />
-              <Legend
-                verticalAlign="top"
-                align="right"
-                iconType="circle"
-                wrapperStyle={{ color: "#98a5b6", fontSize: 12, paddingBottom: 10 }}
-              />
               {visibleSeries.map((item) => (
                 <Line
                   key={item.key}
@@ -193,6 +243,53 @@ export default function BenchmarkPerformanceChart() {
       </div>
     </section>
   );
+}
+
+function PerformancePill({
+  label,
+  value,
+  locale
+}: {
+  label: string;
+  value: number | null;
+  locale: string;
+}) {
+  const toneClass =
+    value === null ? "text-mist" : value >= 0 ? "text-positive" : "text-negative";
+
+  return (
+    <div className="rounded-2xl border border-line bg-white/[0.02] px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-mist">
+        {label}
+      </p>
+      <p className={`mt-1 mono text-sm font-semibold ${toneClass}`}>
+        {value === null ? "N/A" : formatPercent(value, 2, locale)}
+      </p>
+    </div>
+  );
+}
+
+function computeComparisonStats(
+  data: BenchmarkPerformancePoint[],
+  benchmark: Exclude<BenchmarkKey, "portfolio">
+) {
+  const latest = [...data]
+    .reverse()
+    .find(
+      (point) =>
+        Number.isFinite(point.portfolio) && Number.isFinite(point[benchmark])
+    );
+  const portfolio = latest?.portfolio ?? null;
+  const benchmarkValue = latest?.[benchmark] ?? null;
+
+  return {
+    portfolio,
+    benchmark: benchmarkValue,
+    difference:
+      portfolio === null || benchmarkValue === null
+        ? null
+        : portfolio - benchmarkValue
+  };
 }
 
 function formatAxisLabel(value: number, timeframe: TimeframeKey, locale: string) {

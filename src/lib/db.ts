@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
+  BenchmarkPerformanceResponse,
   HistoricalNavResponse,
   PortfolioSettings,
   Transaction,
@@ -66,6 +67,12 @@ function migrate(database: DatabaseSync) {
     );
 
     CREATE TABLE IF NOT EXISTS historical_nav_cache (
+      cache_key TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS benchmark_performance_cache (
       cache_key TEXT PRIMARY KEY,
       payload TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -271,6 +278,38 @@ export function setHistoricalNavCache(
     database
       .prepare(
         `INSERT INTO historical_nav_cache (cache_key, payload, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(cache_key) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at`
+      )
+      .run(cacheKey, JSON.stringify(payload), new Date().toISOString());
+  });
+}
+
+export function getBenchmarkPerformanceCache(cacheKey: string) {
+  return withDatabase((database) => {
+    const row = database
+      .prepare(`SELECT payload, updated_at FROM benchmark_performance_cache WHERE cache_key = ?`)
+      .get(cacheKey) as { payload?: string; updated_at?: string } | undefined;
+
+    if (!row?.payload || !row.updated_at) {
+      return null;
+    }
+
+    return {
+      payload: JSON.parse(row.payload) as BenchmarkPerformanceResponse,
+      updatedAt: row.updated_at
+    };
+  });
+}
+
+export function setBenchmarkPerformanceCache(
+  cacheKey: string,
+  payload: BenchmarkPerformanceResponse
+) {
+  return withDatabase((database) => {
+    database
+      .prepare(
+        `INSERT INTO benchmark_performance_cache (cache_key, payload, updated_at)
          VALUES (?, ?, ?)
          ON CONFLICT(cache_key) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at`
       )

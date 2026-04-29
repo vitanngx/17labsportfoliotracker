@@ -1,8 +1,10 @@
 import { buildPortfolioState } from "@/lib/calculations/portfolio";
 import {
+  getBenchmarkPerformanceCache,
   getHistoricalNavCache,
   getSettings,
   listTransactions,
+  setBenchmarkPerformanceCache,
   setHistoricalNavCache
 } from "@/lib/db";
 import {
@@ -168,6 +170,19 @@ export async function buildHistoricalNavPayload(
 export async function buildBenchmarkPerformancePayload(
   timeframe: TimeframeKey
 ): Promise<BenchmarkPerformanceResponse> {
+  const transactions = listTransactions();
+  const settings = getSettings();
+  const cacheKey = buildBenchmarkPerformanceCacheKey(
+    timeframe,
+    settings.baseCurrency,
+    transactions
+  );
+  const cached = getFreshBenchmarkPerformanceCache(cacheKey, timeframe);
+
+  if (cached) {
+    return cached;
+  }
+
   const navPayload = await buildHistoricalNavPayload(timeframe);
   const config = TIMEFRAME_CONFIG[timeframe];
   const benchmarkAssets = BENCHMARKS.map((benchmark) => ({
@@ -219,13 +234,17 @@ export async function buildBenchmarkPerformancePayload(
       : [`${benchmark.label}: benchmark history unavailable for ${timeframe}.`]
   );
 
-  return {
+  const payload = {
     ok: true,
     timeframe,
     history,
     series,
     warnings: [...benchmarkBundle.warnings, ...missingWarnings]
-  };
+  } satisfies BenchmarkPerformanceResponse;
+
+  setBenchmarkPerformanceCache(cacheKey, payload);
+
+  return payload;
 }
 
 function buildApproximateHistoricalNav(
@@ -452,6 +471,36 @@ function getHistoricalNavCacheTtlMs(timeframe: TimeframeKey) {
   return minutesByTimeframe[timeframe] * 60 * 1000;
 }
 
+function getFreshBenchmarkPerformanceCache(cacheKey: string, timeframe: TimeframeKey) {
+  const cached = getBenchmarkPerformanceCache(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  const updatedAt = new Date(cached.updatedAt).getTime();
+  if (!Number.isFinite(updatedAt)) {
+    return null;
+  }
+
+  if (Date.now() - updatedAt > getBenchmarkPerformanceCacheTtlMs(timeframe)) {
+    return null;
+  }
+
+  return cached.payload;
+}
+
+function getBenchmarkPerformanceCacheTtlMs(timeframe: TimeframeKey) {
+  const minutesByTimeframe: Record<TimeframeKey, number> = {
+    "1D": 2,
+    "7D": 10,
+    "1M": 30,
+    "3M": 60,
+    "1Y": 240
+  };
+
+  return minutesByTimeframe[timeframe] * 60 * 1000;
+}
+
 function buildHistoricalNavCacheKey(
   timeframe: TimeframeKey,
   baseCurrency: string,
@@ -463,6 +512,23 @@ function buildHistoricalNavCacheKey(
 
   return [
     "historical-nav",
+    baseCurrency.toUpperCase(),
+    timeframe,
+    hashString(fingerprint)
+  ].join(":");
+}
+
+function buildBenchmarkPerformanceCacheKey(
+  timeframe: TimeframeKey,
+  baseCurrency: string,
+  transactions: Array<{ id: string; updatedAt?: string }>
+) {
+  const fingerprint = transactions
+    .map((transaction) => `${transaction.id}:${transaction.updatedAt ?? ""}`)
+    .join("|");
+
+  return [
+    "benchmark-performance",
     baseCurrency.toUpperCase(),
     timeframe,
     hashString(fingerprint)

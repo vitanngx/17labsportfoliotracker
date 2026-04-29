@@ -52,9 +52,13 @@
   },
   "benchmarks": {
     "title": "Relative Performance",
-    "subtitle": "Portfolio return compared with major market benchmarks, normalized to the same starting point.",
+    "subtitle": "Portfolio vs {benchmark}, normalized to the same starting point.",
+    "compareWith": "Compare with",
+    "portfolio": "Portfolio",
+    "benchmark": "Benchmark",
+    "difference": "Difference",
     "loading": "Loading {timeframe} benchmarks...",
-    "empty": "Benchmark performance data is not available for this timeframe yet.",
+    "empty": "{benchmark} performance data is not available for this timeframe yet.",
     "loadError": "Unable to load benchmark performance."
   },
   "cash": {

@@ -52,9 +52,13 @@
   },
   "benchmarks": {
     "title": "Hiệu suất tương đối",
-    "subtitle": "So sánh lợi nhuận danh mục với các benchmark lớn, chuẩn hóa cùng một điểm bắt đầu.",
+    "subtitle": "Danh mục vs {benchmark}, chuẩn hóa cùng một điểm bắt đầu.",
+    "compareWith": "So sánh với",
+    "portfolio": "Danh mục",
+    "benchmark": "Benchmark",
+    "difference": "Chênh lệch",
     "loading": "Đang tải benchmark {timeframe}...",
-    "empty": "Chưa có dữ liệu hiệu suất benchmark cho khung thời gian này.",
+    "empty": "Chưa có dữ liệu hiệu suất {benchmark} cho khung thời gian này.",
     "loadError": "Không thể tải hiệu suất benchmark."
   },
   "cash": {
